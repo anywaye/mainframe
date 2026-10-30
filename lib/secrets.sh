@@ -7,7 +7,7 @@ BW_EMAIL="${BW_EMAIL:-}"
 if [ -z "$BW_EMAIL" ]; then
   echo "[secrets] BW_EMAIL not set. Skipping Bitwarden setup."
   echo "[secrets] To use Bitwarden: export BW_EMAIL=your@email.com and re-run."
-  return 0
+  exit 0
 fi
 
 if ! command -v bw &>/dev/null; then

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily mainframe restic backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

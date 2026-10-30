@@ -1,0 +1,13 @@
+[Unit]
+Description=mainframe restic maintenance (forget/prune/check)
+Wants=network-online.target
+After=network-online.target mainframe-backup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mainframe-backup.sh --maintenance
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+CacheDirectory=restic
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=12h

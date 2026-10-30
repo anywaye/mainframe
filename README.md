@@ -78,7 +78,7 @@ All config via environment variables or `.env` file (from `.env.template`):
 export TAILSCALE_AUTHKEY="tskey-auth-..."
 export GH_TOKEN="ghp_..."
 export BW_EMAIL="your@email.com"  # optional
-bash provision.sh --mode dev
+mf provision --mode dev
 
 # 2. Set up your project
 bash projects/anywaye/setup.sh
@@ -98,7 +98,7 @@ export COURIER_TOKEN=dummy
 ```sh
 export TAILSCALE_AUTHKEY="tskey-auth-..."
 export GH_TOKEN="ghp_..."
-bash provision.sh --mode prod
+mf provision --mode prod
 # Then follow the printed instructions for substrate install
 ```
 

@@ -15,7 +15,7 @@ fi
 
 # Use --reset if already connected, otherwise plain up
 if tailscale status >/dev/null 2>&1; then
-  tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh --reset 2>/dev/null || tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh
+  tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh --reset --accept-risk=lose-ssh 2>/dev/null || tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh --accept-risk=lose-ssh
 else
   tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh
 fi

@@ -188,7 +188,8 @@ if [ "$HARDEN_FAIL2BAN" = "true" ]; then
   apt-get install -y -qq fail2ban 2>&1 | tail -1 || true
   mkdir -p /etc/fail2ban/jail.d 2>/dev/null || true
   # Determine admin IP from SSH connection
-  ADMIN_IP="${SSH_CLIENT%% *}"
+  ADMIN_IP="${SSH_CLIENT:-}"
+  ADMIN_IP="${ADMIN_IP%% *}"
   [ -z "$ADMIN_IP" ] && ADMIN_IP="127.0.0.1"
   # Get SSH port
   SSH_PORT=$(ss -tlnp 2>/dev/null | grep sshd | head -1 | sed -n 's/.*:\([0-9]*\).*/\1/p')

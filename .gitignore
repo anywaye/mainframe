@@ -1,0 +1,14 @@
+# Secrets — never commit
+.env
+*.key
+*.pem
+*.secret
+secrets/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tar.gz
+*.tgz

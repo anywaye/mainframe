@@ -1,6 +1,8 @@
-# Mainframe — reproducible dev VPS provisioning
+# Mainframe
 
-A project-agnostic, user-agnostic VPS provisioning system. Take a fresh
+A secure, reproducible VPS bootstrap for developers.
+
+Take a fresh
 Ubuntu 24.04 VPS to a secure, configured dev box in one command.
 
 ## What it does

@@ -23,6 +23,8 @@ func init() {
 	rootCmd.AddCommand(provisionCmd)
 	rootCmd.AddCommand(auditCmd)
 	rootCmd.AddCommand(hardenCmd)
+	rootCmd.AddCommand(newCmd)
+	rootCmd.AddCommand(lockCmd)
 	rootCmd.AddCommand(versionCmd)
 }
 

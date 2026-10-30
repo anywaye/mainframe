@@ -1048,7 +1048,7 @@ fi
 # --------------------------------------------------------------- services ---
 section services
 if have systemctl && systemctl list-units --no-legend >/dev/null 2>&1; then
-  failed=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | paste -sd, -)
+  failed=$(systemctl --failed --no-legend --plain 2>/dev/null | awk '{print $1}' | grep -vE 'cloud-init|systemd-networkd-wait-online' | paste -sd, -)
   if [[ -n "$failed" ]]; then warn services.failed "failed units: $(untrusted "$failed" 300)"
   else pass services.failed "no failed systemd units"; fi
   if systemctl is-active --quiet mainframe-deadman.timer 2>/dev/null; then

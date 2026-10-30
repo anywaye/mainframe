@@ -56,6 +56,24 @@ if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
     mkdir -p /etc/ssh/sshd_config.d 2>/dev/null || true
     cp "$ASSETS_DIR/ssh/00-mainframe.conf" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null || echo "[harden] SSH config dir not found (non-Linux?)"
     groupadd -f sshusers 2>/dev/null || true
+    # Add users with SSH authorized_keys to sshusers group
+    for home in /root /home/*; do
+      if [ -f "$home/.ssh/authorized_keys" ]; then
+        user=$(basename "$home")
+        [ "$user" = "root" ] && user="root"
+        [ "$home" = "/root" ] && user="root"
+        if id "$user" >/dev/null 2>&1; then
+          usermod -aG sshusers "$user" 2>/dev/null || true
+          echo "[harden] Added $user to sshusers group"
+        fi
+      fi
+    done
+    # Ensure the default sudo user is in sshusers
+    for u in ubuntu admin debian; do
+      if id "$u" >/dev/null 2>&1; then
+        usermod -aG sshusers "$u" 2>/dev/null || true
+      fi
+    done
     sshd -t 2>/dev/null && echo "[harden] SSH config valid" || echo "[harden] SSH validation skipped"
   fi
 fi
@@ -101,7 +119,17 @@ if [ "$HARDEN_BBR" = "true" ]; then
   echo "[harden] Applying sysctl (including BBR)..."
   mkdir -p /etc/sysctl.d 2>/dev/null || true
   cp "$ASSETS_DIR/sysctl/99-mainframe.conf" /etc/sysctl.d/99-mainframe.conf 2>/dev/null || echo "[harden] sysctl dir not available (non-Linux?)"
+  # Apply sysctl to all interfaces including specific ones
   sysctl --system >/dev/null 2>&1 || true
+  # Per-interface overrides for common interface names
+  for iface in eth0 ens3 enp0s3 eno1; do
+    if ip link show "$iface" >/dev/null 2>&1; then
+      sysctl -w "net.ipv4.conf.$iface.accept_redirects=0" >/dev/null 2>&1 || true
+      sysctl -w "net.ipv4.conf.$iface.send_redirects=0" >/dev/null 2>&1 || true
+      sysctl -w "net.ipv4.conf.$iface.accept_source_route=0" >/dev/null 2>&1 || true
+      sysctl -w "net.ipv6.conf.$iface.accept_redirects=0" >/dev/null 2>&1 || true
+    fi
+  done
 fi
 
 # 3. Journald limits
@@ -159,9 +187,18 @@ fi
 if [ "$HARDEN_FAIL2BAN" = "true" ]; then
   apt-get install -y -qq fail2ban 2>&1 | tail -1 || true
   mkdir -p /etc/fail2ban/jail.d 2>/dev/null || true
-  cp "$ASSETS_DIR/fail2ban/vps-forge.local" /etc/fail2ban/jail.d/mainframe.local 2>/dev/null || true
+  # Determine admin IP from SSH connection
+  ADMIN_IP="${SSH_CLIENT%% *}"
+  [ -z "$ADMIN_IP" ] && ADMIN_IP="127.0.0.1"
+  # Get SSH port
+  SSH_PORT=$(ss -tlnp 2>/dev/null | grep sshd | head -1 | sed -n 's/.*:\([0-9]*\).*/\1/p')
+  [ -z "$SSH_PORT" ] && SSH_PORT="22"
+  # Copy and fill placeholders
+  if [ -f "$ASSETS_DIR/fail2ban/mainframe.local" ]; then
+    sed -e "s/<ssh-port>/$SSH_PORT/g" -e "s/<admin-ip>/$ADMIN_IP/g" "$ASSETS_DIR/fail2ban/mainframe.local" > /etc/fail2ban/jail.d/mainframe.local
+  fi
   systemctl enable --now fail2ban 2>&1 | tail -1 || true
-  echo "[harden] fail2ban installed"
+  echo "[harden] fail2ban installed (port=$SSH_PORT, admin=$ADMIN_IP)"
 fi
 
 # 10. AppArmor

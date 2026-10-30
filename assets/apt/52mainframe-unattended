@@ -10,4 +10,9 @@ Unattended-Upgrade::SyslogEnable "true";
 //   Unattended-Upgrade::Automatic-Reboot "true";
 //   Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
 //   Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+// Allow Tailscale updates (origin pattern)
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Tailscale";
+};
+
 Unattended-Upgrade::Automatic-Reboot "false";

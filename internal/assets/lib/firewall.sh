@@ -5,7 +5,7 @@ set -euo pipefail
 MODE="${1:-dev}"
 FIREWALL_MODE="${2:-}"
 FIREWALL_EXTRA_PORTS="${3:-}"
-
+ALLOW_DB_FROM="${4:-${ALLOW_DB_FROM:-}}"
 if [ -z "$FIREWALL_MODE" ]; then
   if [ "$MODE" = "dev" ]; then
     FIREWALL_MODE="tailscale-only"
@@ -51,6 +51,13 @@ case "$FIREWALL_MODE" in
     fi
     ;;
 esac
+
+# DB port allowlisting (from --allow-db-from)
+if [ -n "$ALLOW_DB_FROM" ]; then
+  ufw allow from "$ALLOW_DB_FROM" to any port 5432 proto tcp comment "PostgreSQL from $ALLOW_DB_FROM"
+  ufw allow from "$ALLOW_DB_FROM" to any port 6432 proto tcp comment "PgBouncer from $ALLOW_DB_FROM"
+  echo "[firewall] DB ports allowed from: $ALLOW_DB_FROM"
+fi
 
 # Extra ports
 if [ -n "$FIREWALL_EXTRA_PORTS" ]; then

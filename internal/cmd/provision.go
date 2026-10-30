@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	provisionMode    string
-	provisionProject string
+	provisionMode     string
+	provisionProject  string
+	allowDBFrom       string
 )
 
 var provisionCmd = &cobra.Command{
@@ -78,7 +79,7 @@ var provisionCmd = &cobra.Command{
 				firewallMode = "public"
 			}
 		}
-		if err := runScriptWithArgs("lib/firewall.sh", provisionMode, firewallMode, os.Getenv("FIREWALL_EXTRA_PORTS")); err != nil {
+		if err := runScriptWithArgs("lib/firewall.sh", provisionMode, firewallMode, os.Getenv("FIREWALL_EXTRA_PORTS"), allowDBFrom); err != nil {
 			return fmt.Errorf("firewall failed: %w", err)
 		}
 
@@ -119,6 +120,7 @@ var provisionCmd = &cobra.Command{
 func init() {
 	provisionCmd.Flags().StringVar(&provisionMode, "mode", "", "Provisioning mode: dev or prod")
 	provisionCmd.Flags().StringVar(&provisionProject, "project", "", "Project name to set up after provisioning")
+	provisionCmd.Flags().StringVar(&allowDBFrom, "allow-db-from", "", "Allow specific IP on DB ports (PostgreSQL, PgBouncer)")
 	provisionCmd.MarkFlagRequired("mode")
 }
 

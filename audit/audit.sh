@@ -1190,7 +1190,7 @@ else
     st=${R_STATUS[$i]}
     if (( QUIET )) && [[ "$st" == PASS || "$st" == INFO || "$st" == SKIP ]]; then continue; fi
     if [[ "${R_SECTION[$i]}" != "$last" ]]; then
-      last=${R_SECTION[$i]}; printf '\n%s%s%s\n' "$cB" "${last^^}" "$c0"
+      last=${R_SECTION[$i]}; printf '\n%s%s%s\n' "$cB" "$(echo "$last" | tr '[:lower:]' '[:upper:]')" "$c0"
     fi
     case "$st" in PASS) c=$cP;; WARN) c=$cW;; FAIL) c=$cF;; INFO) c=$cI;; *) c=$cS;; esac
     printf '  %s%-4s%s  %-28s %s\n' "$c" "$st" "$c0" "${R_ID[$i]}" "${R_MSG[$i]}"

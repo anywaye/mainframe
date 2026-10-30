@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -189,6 +190,42 @@ func runScriptWithArgs(relPath string, args ...string) error {
 	return cmd.Run()
 }
 
+func ensureAssets() string {
+	tmpDir := "/tmp/mainframe-assets"
+	if _, err := os.Stat(tmpDir + "/.extracted"); err == nil {
+		return tmpDir
+	}
+	os.MkdirAll(tmpDir, 0755)
+	assets.Walk(".", func(path string, d fs.DirEntry, err error) error {
+		if path == "." || err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			os.MkdirAll(tmpDir+"/"+path, 0755)
+			return nil
+		}
+		data, _ := assets.ReadFile(path)
+		dir := path
+		if i := len(dir) - 1; i >= 0 {
+			for i >= 0 && dir[i] != '/' {
+				i--
+			}
+			if i >= 0 {
+				dir = dir[:i]
+			} else {
+				dir = ""
+			}
+		}
+		if dir != "" {
+			os.MkdirAll(tmpDir+"/"+dir, 0755)
+		}
+		os.WriteFile(tmpDir+"/"+path, data, 0644)
+		return nil
+	})
+	os.WriteFile(tmpDir+"/.extracted", []byte("ok"), 0644)
+	return tmpDir
+}
+
 func findAsset(relPath string) string {
 	if _, err := os.Stat(relPath); err == nil {
 		return relPath
@@ -199,15 +236,8 @@ func findAsset(relPath string) string {
 		return dir + "/" + relPath
 	}
 	if assets.Exists(relPath) {
-		tmpDir := "/tmp/mainframe-assets"
-		os.MkdirAll(tmpDir, 0755)
-		dest := tmpDir + "/" + relPath
-		os.MkdirAll(dest[:len(dest)-len("/"+baseName(relPath))], 0755)
-		if _, err := os.Stat(dest); os.IsNotExist(err) {
-			data, _ := assets.ReadFile(relPath)
-			os.WriteFile(dest, data, 0644)
-		}
-		return dest
+		tmpDir := ensureAssets()
+		return tmpDir + "/" + relPath
 	}
 	return ""
 }

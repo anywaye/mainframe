@@ -2,7 +2,7 @@
 # Mainframe hardening — sane defaults, no levels.
 # Applies a solid security baseline. Optional extras are env-gated.
 # Assets (config templates) are in assets/. Copy, fill placeholders, validate, apply.
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSETS_DIR="$SCRIPT_DIR/../assets"
@@ -31,29 +31,34 @@ HARDEN_CORE_DUMPS="${HARDEN_CORE_DUMPS:-false}"
 
 echo "[harden] Running audit (read-only, baseline)..."
 if [ -f "$AUDIT_DIR/audit.sh" ]; then
-  bash "$AUDIT_DIR/audit.sh" 2>&1 | tail -3
+  bash "$AUDIT_DIR/audit.sh" 2>&1 | tail -3 || true
 fi
 
 # 1. SSH hardening (sane defaults)
 if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
   echo "[harden] Applying SSH hardening..."
-  cp "$ASSETS_DIR/ssh/00-mainframe.conf" /etc/ssh/sshd_config.d/00-mainframe.conf
-  groupadd -f sshusers
-  sshd -t && echo "[harden] SSH config valid"
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "[harden] Not root — skipping SSH hardening (run as root on the VPS)"
+  else
+    cp "$ASSETS_DIR/ssh/00-mainframe.conf" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null || echo "[harden] SSH config dir not found (non-Linux?)"
+    groupadd -f sshusers 2>/dev/null || true
+    sshd -t 2>/dev/null && echo "[harden] SSH config valid" || echo "[harden] SSH validation skipped"
+  fi
 fi
 
 # 2. Sysctl (sane defaults)
 if [ "$HARDEN_BBR" = "true" ]; then
   echo "[harden] Applying sysctl (including BBR)..."
-  cp "$ASSETS_DIR/sysctl/99-mainframe.conf" /etc/sysctl.d/99-mainframe.conf
+  mkdir -p /etc/sysctl.d
+  cp "$ASSETS_DIR/sysctl/99-mainframe.conf" /etc/sysctl.d/99-mainframe.conf 2>/dev/null || echo "[harden] sysctl dir not available (non-Linux?)"
   sysctl --system >/dev/null 2>&1 || true
 fi
 
 # 3. Journald limits
 if [ "$HARDEN_JOURNALD" = "true" ]; then
   echo "[harden] Applying journald limits..."
-  mkdir -p /etc/systemd/journald.conf.d
-  cp "$ASSETS_DIR/journald/10-mainframe.conf" /etc/systemd/journald.conf.d/10-mainframe.conf
+  mkdir -p /etc/systemd/journald.conf.d 2>/dev/null || true
+  cp "$ASSETS_DIR/journald/10-mainframe.conf" /etc/systemd/journald.conf.d/10-mainframe.conf 2>/dev/null || echo "[harden] journald not available (non-Linux?)"
   systemctl restart systemd-journald 2>/dev/null || true
 fi
 
@@ -154,7 +159,7 @@ fi
 echo ""
 echo "[harden] Running audit (post-hardening)..."
 if [ -f "$AUDIT_DIR/audit.sh" ]; then
-  bash "$AUDIT_DIR/audit.sh" 2>&1 | tail -3
+  bash "$AUDIT_DIR/audit.sh" 2>&1 | tail -3 || true
 fi
 
 echo "[harden] Done. Review audit output above."

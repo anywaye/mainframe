@@ -3,32 +3,6 @@
 # Implements the standard OS interface.
 set -euo pipefail
 
-install_packages() {
-  # Install packages from packages.conf
-  local conf="${1:-/code/mainframe/packages.conf}"
-  if [ ! -f "$conf" ]; then
-    echo "[debian] No packages.conf found. Skipping."
-    return 0
-  fi
-
-  apt-get update -qq
-  local pkgs=""
-  while IFS= read -r line; do
-    # Skip comments and empty lines
-    line="${line%%#*}"
-    line="$(echo "$line" | tr -d '[:space:]')"
-    [ -z "$line" ] && continue
-    # Handle version pins (e.g., go:1.26.6)
-    local pkg="${line%%:*}"
-    pkgs="$pkgs $pkg"
-  done < "$conf"
-
-  if [ -n "$pkgs" ]; then
-    apt-get install -y -qq $pkgs 2>&1 | tail -2
-  fi
-  echo "[debian] Packages installed from $conf"
-}
-
 install_docker() {
   if command -v docker &>/dev/null; then
     echo "[debian] Docker already installed"
@@ -128,3 +102,44 @@ install_postgresql_client() {
 }
 
 echo "[debian] OS module loaded"
+
+# Dispatch: install a single package (with optional version)
+install_one() {
+  local entry="$1"
+  local pkg="${entry%%:*}"
+  local ver="${entry#*:}"
+  [ "$ver" = "$entry" ] && ver=""
+  case "$pkg" in
+    docker) install_docker ;;
+    go) install_go "${ver:-1.26.6}" ;;
+    node) install_node "${ver:-22}" ;;
+    helm) install_helm "v${ver:-4.3.0}" ;;
+    gh) install_gh ;;
+    bw) install_bw ;;
+    osv-scanner) install_osv_scanner ;;
+    postgresql-client|psql) install_postgresql_client ;;
+    python3|python3-venv|uv) install_python ;;
+    *) 
+      if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+        apt-get install -y -qq "$pkg" 2>&1 | tail -1
+      fi
+      ;;
+  esac
+}
+
+# Main: read packages.conf and install all
+install_packages() {
+  local conf="${1:-/code/mainframe/packages.conf}"
+  if [ ! -f "$conf" ]; then
+    echo "[debian] No packages.conf found at $conf. Skipping."
+    return 0
+  fi
+  apt-get update -qq
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [ -z "$line" ] && continue
+    install_one "$line"
+  done < "$conf"
+  echo "[debian] All packages installed from $conf"
+}

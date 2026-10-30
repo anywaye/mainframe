@@ -51,6 +51,13 @@ var provisionCmd = &cobra.Command{
 		if err := runScript("lib/os/" + osFamily + ".sh"); err != nil {
 			return fmt.Errorf("OS module failed: %w", err)
 		}
+		// Install packages from packages.conf
+		pkgConf := findAsset("packages.conf")
+		if pkgConf != "" {
+			if err := runScriptWithArgs("lib/packages.sh", pkgConf); err != nil {
+				fmt.Printf("  Warning: package installation had issues: %v\n", err)
+			}
+		}
 
 		fmt.Println("[3/8] Setting up Tailscale...")
 		if os.Getenv("TAILSCALE_ENABLED") != "false" {

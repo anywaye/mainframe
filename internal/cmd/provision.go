@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/anywaye/mainframe/internal/assets"
 	"github.com/spf13/cobra"
@@ -15,11 +16,13 @@ var (
 	provisionMode     string
 	provisionProject  string
 	allowDBFrom       string
+	provisionDryRun   bool
 )
 
 var provisionCmd = &cobra.Command{
 	Use:   "provision",
 	Short: "Provision a VPS as a dev or prod box",
+	Long:  "Provision a fresh VPS. Detects OS, installs packages, sets up Tailscale, applies hardening, configures firewall, and runs mode-specific setup. Use --dry-run to preview without executing.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if provisionMode != "dev" && provisionMode != "prod" {
 			return fmt.Errorf("--mode must be 'dev' or 'prod'")
@@ -28,98 +31,172 @@ var provisionCmd = &cobra.Command{
 		loadEnv()
 
 		if os.Getenv("TAILSCALE_AUTHKEY") == "" {
-			return fmt.Errorf("TAILSCALE_AUTHKEY is not set")
+			return fmt.Errorf("TAILSCALE_AUTHKEY is not set. Set it in .env or environment.\n  Hint: generate one at https://console.tailscale.com/admin/settings/keys")
 		}
 		if os.Getenv("GH_TOKEN") == "" {
-			return fmt.Errorf("GH_TOKEN is not set")
+			return fmt.Errorf("GH_TOKEN is not set. Set it in .env or environment.\n  Hint: gh auth token")
 		}
 
 		baseDir := getEnv("BASE_DIR", "/code")
 		vpsName := getEnv("VPS_NAME", "mainframe")
 
 		fmt.Printf("=== Provisioning %s (mode: %s) ===\n", vpsName, provisionMode)
-		fmt.Printf("Base dir: %s\n\n", baseDir)
+		fmt.Printf("Base dir: %s\n", baseDir)
+		fmt.Printf("Dry run: %v\n\n", provisionDryRun)
 
-		fmt.Println("[1/8] Detecting OS...")
-		osFamily, err := detectOS()
-		if err != nil {
-			return err
-		}
-		fmt.Printf("  OS family: %s\n", osFamily)
+		start := time.Now()
+		step := 0
+		total := 8
 
-		fmt.Println("[2/8] Installing packages...")
-		if err := runScript("lib/os/" + osFamily + ".sh"); err != nil {
-			return fmt.Errorf("OS module failed: %w", err)
-		}
-		// Install packages from packages.conf
-		pkgConf := findAsset("packages.conf")
-		if pkgConf != "" {
-			if err := runScriptWithArgs("lib/packages.sh", pkgConf); err != nil {
-				fmt.Printf("  Warning: package installation had issues: %v\n", err)
+		runStep := func(name string, fn func() error) bool {
+			step++
+			t0 := time.Now()
+			fmt.Printf("[%d/%d] %s...\n", step, total, name)
+			if provisionDryRun {
+				fmt.Printf("  (dry-run: skipped)\n\n")
+				return true
 			}
+			if err := fn(); err != nil {
+				elapsed := time.Since(t0).Round(time.Millisecond)
+				fmt.Printf("  FAILED (%s): %v\n", elapsed, err)
+				fmt.Printf("  Hint: check the output above for details. Re-run provision to retry.\n\n")
+				return false
+			}
+			elapsed := time.Since(t0).Round(time.Millisecond)
+			fmt.Printf("  OK (%s)\n\n", elapsed)
+			return true
 		}
 
-		fmt.Println("[3/8] Setting up Tailscale...")
-		if os.Getenv("TAILSCALE_ENABLED") != "false" {
+		// Step 1: Detect OS
+		var osFamily string
+		if !runStep("Detecting OS", func() error {
+			f, err := detectOS()
+			if err != nil {
+				return err
+			}
+			osFamily = f
+			fmt.Printf("  OS family: %s\n", osFamily)
+			return nil
+		}) {
+			return fmt.Errorf("OS detection failed")
+		}
+
+		// Step 2: Install packages
+		if !runStep("Installing packages", func() error {
+			if err := runScript("lib/os/" + osFamily + ".sh"); err != nil {
+				return fmt.Errorf("OS module failed: %w", err)
+			}
+			pkgConf := findAsset("packages.conf")
+			if pkgConf != "" {
+				if err := runScriptWithArgs("lib/packages.sh", pkgConf); err != nil {
+					fmt.Printf("  Warning: package installation had issues: %v\n", err)
+					fmt.Printf("  Hint: some packages may need manual installation\n")
+				}
+			}
+			return nil
+		}) {
+			return fmt.Errorf("package installation failed")
+		}
+
+		// Step 3: Tailscale
+		if !runStep("Setting up Tailscale", func() error {
+			if os.Getenv("TAILSCALE_ENABLED") == "false" {
+				fmt.Println("  Skipped (TAILSCALE_ENABLED=false)")
+				return nil
+			}
 			if err := runScript("lib/tailscale.sh"); err != nil {
 				return fmt.Errorf("Tailscale setup failed: %w", err)
 			}
-		} else {
-			fmt.Println("  Skipped (TAILSCALE_ENABLED=false)")
+			return nil
+		}) {
+			return fmt.Errorf("Tailscale setup failed")
 		}
 
-		fmt.Println("[4/8] Applying hardening...")
-		if os.Getenv("HARDEN_ENABLED") != "false" {
+		// Step 4: Hardening
+		if !runStep("Applying hardening", func() error {
+			if os.Getenv("HARDEN_ENABLED") == "false" {
+				fmt.Println("  Skipped (HARDEN_ENABLED=false)")
+				return nil
+			}
 			if err := runScript("lib/harden.sh"); err != nil {
 				return fmt.Errorf("hardening failed: %w", err)
 			}
-		} else {
-			fmt.Println("  Skipped (HARDEN_ENABLED=false)")
+			return nil
+		}) {
+			return fmt.Errorf("hardening failed")
 		}
 
-		fmt.Println("[5/8] Configuring firewall...")
-		firewallMode := getEnv("FIREWALL_MODE", "")
-		if firewallMode == "" {
-			if provisionMode == "dev" {
-				firewallMode = "tailscale-only"
-			} else {
-				firewallMode = "public"
+		// Step 5: Firewall
+		if !runStep("Configuring firewall", func() error {
+			firewallMode := getEnv("FIREWALL_MODE", "")
+			if firewallMode == "" {
+				if provisionMode == "dev" {
+					firewallMode = "tailscale-only"
+				} else {
+					firewallMode = "public"
+				}
 			}
-		}
-		if err := runScriptWithArgs("lib/firewall.sh", provisionMode, firewallMode, os.Getenv("FIREWALL_EXTRA_PORTS"), allowDBFrom); err != nil {
-			return fmt.Errorf("firewall failed: %w", err)
-		}
-
-		fmt.Println("[6/8] Setting up secrets...")
-		if err := runScript("lib/secrets.sh"); err != nil {
-			return fmt.Errorf("secrets setup failed: %w", err)
+			if err := runScriptWithArgs("lib/firewall.sh", provisionMode, firewallMode, os.Getenv("FIREWALL_EXTRA_PORTS"), allowDBFrom); err != nil {
+				return fmt.Errorf("firewall failed: %w", err)
+			}
+			return nil
+		}) {
+			return fmt.Errorf("firewall configuration failed")
 		}
 
-		fmt.Println("[7/8] Creating directory structure...")
-		if err := os.MkdirAll(baseDir, 0755); err != nil {
-			return err
-		}
-		os.MkdirAll(baseDir+"/worktrees", 0755)
-		if _, err := os.Lstat("/data/workspace"); os.IsNotExist(err) {
-			os.MkdirAll("/data", 0755)
-			os.Symlink(baseDir, "/data/workspace")
+		// Step 6: Secrets
+		if !runStep("Setting up secrets", func() error {
+			if err := runScript("lib/secrets.sh"); err != nil {
+				// secrets.sh exits 0 when BW_EMAIL is not set (optional)
+				fmt.Printf("  Warning: %v\n", err)
+				fmt.Println("  Hint: set BW_EMAIL and re-run for Bitwarden setup")
+			}
+			return nil
+		}) {
+			// Non-fatal: secrets are optional
 		}
 
-		fmt.Printf("[8/8] Running %s mode setup...\n", provisionMode)
-		if err := runScript("modes/" + provisionMode + ".sh"); err != nil {
-			return fmt.Errorf("mode setup failed: %w", err)
+		// Step 7: Directory structure
+		if !runStep("Creating directory structure", func() error {
+			if err := os.MkdirAll(baseDir, 0755); err != nil {
+				return err
+			}
+			os.MkdirAll(baseDir+"/worktrees", 0755)
+			if _, err := os.Lstat("/data/workspace"); os.IsNotExist(err) {
+				os.MkdirAll("/data", 0755)
+				os.Symlink(baseDir, "/data/workspace")
+			}
+			return nil
+		}) {
+			return fmt.Errorf("directory creation failed")
+		}
+
+		// Step 8: Mode setup
+		if !runStep("Running "+provisionMode+" mode setup", func() error {
+			if err := runScript("modes/" + provisionMode + ".sh"); err != nil {
+				return fmt.Errorf("mode setup failed: %w", err)
+			}
+			return nil
+		}) {
+			return fmt.Errorf("mode setup failed")
 		}
 
 		if provisionProject != "" {
 			fmt.Printf("Setting up project: %s...\n", provisionProject)
 			if err := runScript("projects/" + provisionProject + "/setup.sh"); err != nil {
-				return fmt.Errorf("project setup failed: %w", err)
+				fmt.Printf("  Warning: project setup failed: %v\n", err)
 			}
 		}
 
-		fmt.Println("\n=== Provisioning complete ===")
+		elapsed := time.Since(start).Round(time.Second)
+		fmt.Println("=== Provisioning complete ===")
 		fmt.Printf("VPS IP: %s\n", getIP())
+		fmt.Printf("Total time: %s\n", elapsed)
 		fmt.Println("Done!")
+		fmt.Println("\nNext steps:")
+		fmt.Println("  1. Verify SSH from a new session: ssh " + vpsName)
+		fmt.Println("  2. Run: mf audit (check security score)")
+		fmt.Println("  3. Clone repos: git clone ... /code/anywaye/<repo>")
 		return nil
 	},
 }
@@ -128,6 +205,7 @@ func init() {
 	provisionCmd.Flags().StringVar(&provisionMode, "mode", "", "Provisioning mode: dev or prod")
 	provisionCmd.Flags().StringVar(&provisionProject, "project", "", "Project name to set up after provisioning")
 	provisionCmd.Flags().StringVar(&allowDBFrom, "allow-db-from", "", "Allow specific IP on DB ports (PostgreSQL, PgBouncer)")
+	provisionCmd.Flags().BoolVar(&provisionDryRun, "dry-run", false, "Preview without executing")
 	provisionCmd.MarkFlagRequired("mode")
 }
 

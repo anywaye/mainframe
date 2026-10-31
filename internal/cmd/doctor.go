@@ -43,7 +43,7 @@ var doctorCmd = &cobra.Command{
 		check("Tailscale connected", tsConnected, "tailscale up --authkey=...")
 
 		// Firewall
-		ufwOut, _ := exec.Command("ufw", "status").Output()
+		ufwOut, _ := exec.Command("sudo", "ufw", "status").Output()
 		ufwActive := strings.Contains(string(ufwOut), "active")
 		check("Firewall active", ufwActive, "mf provision --mode dev")
 
@@ -60,7 +60,7 @@ var doctorCmd = &cobra.Command{
 		}
 
 		// Root password
-		rootpw, _ := exec.Command("bash", "-c", "awk -F: '$1==\"root\"{print substr($2,1,1)}' /etc/shadow").Output()
+		rootpw, _ := exec.Command("sudo", "bash", "-c", "awk -F: '$1==\"root\"{print substr($2,1,1)}' /etc/shadow").Output()
 		hasRootPw := strings.TrimSpace(string(rootpw)) == "$"
 		check("Root password set (console access)", hasRootPw, "passwd root")
 

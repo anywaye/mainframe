@@ -13,11 +13,6 @@ if ! command -v tailscale &>/dev/null; then
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 
-# Use --reset if already connected, otherwise plain up
-if tailscale status >/dev/null 2>&1; then
-  tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh --reset --accept-risk=lose-ssh 2>/dev/null || tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh --accept-risk=lose-ssh
-else
-  tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh
-fi
+tailscale up --authkey="$TAILSCALE_AUTHKEY"
 echo "Tailscale: connected"
 echo "  Tailscale IP: $(tailscale ip -4 2>/dev/null || echo 'check tailscale status')"

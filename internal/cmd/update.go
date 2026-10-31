@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -20,7 +21,7 @@ var updateCmd = &cobra.Command{
 
 		emit := func(msg string) {
 			if jsonFlag {
-				data, _ := json.Marshal(map[string]string{"type": "info", "msg": msg, "ts": fmt.Sprintf("%d", 0)})
+				data, _ := json.Marshal(map[string]string{"type": "info", "msg": msg, "ts": time.Now().UTC().Format(time.RFC3339)})
 				fmt.Println(string(data))
 			} else {
 				fmt.Println(msg)

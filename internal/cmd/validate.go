@@ -28,9 +28,15 @@ var validateCmd = &cobra.Command{
 			}
 		}
 
-		// Check .env file
+		// Check .env file (current dir or home)
 		_, err := os.Stat(".env")
-		check(".env file exists", err == nil, "cp .env.template .env && edit .env")
+		homeEnv := false
+		if err != nil {
+			home, _ := os.UserHomeDir()
+			_, err = os.Stat(home + "/.env")
+			homeEnv = err == nil
+		}
+		check(".env file exists", err == nil || homeEnv, "cp .env.template .env && edit .env (or ~/.env)")
 
 		// Check TAILSCALE_AUTHKEY
 		tsKey := os.Getenv("TAILSCALE_AUTHKEY")

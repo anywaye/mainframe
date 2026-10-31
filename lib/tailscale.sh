@@ -62,6 +62,6 @@ chmod +x /usr/local/bin/tailscale-watchdog
 
 # Add cron job for watchdog (every minute)
 if ! crontab -l 2>/dev/null | grep -q "tailscale-watchdog"; then
-  (crontab -l 2>/dev/null; echo "* * * * * /usr/local/bin/tailscale-watchdog") | crontab -
+  (crontab -l 2>/dev/null || true; echo "* * * * * /usr/local/bin/tailscale-watchdog") | crontab - 2>/dev/null || true
   echo "[tailscale] Watchdog cron job installed (checks every minute)"
 fi

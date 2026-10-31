@@ -34,7 +34,12 @@ var doctorCmd = &cobra.Command{
 		hasRootKey := err == nil
 		_, err = os.Stat("/home/ubuntu/.ssh/authorized_keys")
 		hasUbuntuKey := err == nil
-		check("SSH key for root", hasRootKey, "ssh-copy-id root@<ip>")
+		// Root key is optional if ubuntu has a key and sudo works
+		if !hasRootKey && hasUbuntuKey {
+			fmt.Println("  [OK]   SSH key for root (optional — ubuntu user has key)")
+		} else {
+			check("SSH key for root", hasRootKey, "ssh-copy-id root@<ip>")
+		}
 		check("SSH key for ubuntu", hasUbuntuKey, "ssh-copy-id ubuntu@<ip>")
 
 		// Tailscale

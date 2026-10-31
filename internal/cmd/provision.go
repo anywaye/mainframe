@@ -76,27 +76,25 @@ var provisionCmd = &cobra.Command{
 		runStep := func(name string, fn func() error) bool {
 			step++
 			t0 := time.Now()
-			logStep(step, total, name)
+			progress := (step - 1) * 100 / total
+			emitProgress(ProgressEvent{Type: "step_start", Step: step, Total: total, Name: name, Progress: progress})
 			if provisionDryRun {
-				logMsg("  (dry-run: skipped)")
-				logMsg("")
+				emitProgress(ProgressEvent{Type: "step_skipped", Step: step, Total: total, Name: name, Message: "dry-run"})
 				return true
 			}
 			if hasState(name) && !provisionForce {
-				logMsg("  (already completed, skipping)")
-				logMsg("")
+				emitProgress(ProgressEvent{Type: "step_skipped", Step: step, Total: total, Name: name, Message: "already completed"})
+				saveState(name)
 				return true
 			}
 			if err := fn(); err != nil {
-				elapsed := time.Since(t0).Round(time.Millisecond)
-				logFail(elapsed.String(), err, "check the output above for details. Re-run provision to retry.")
-				logMsg("")
+				elapsed := time.Since(t0).Milliseconds()
+				emitProgress(ProgressEvent{Type: "step_failed", Step: step, Total: total, Name: name, Error: err.Error(), ElapsedMs: elapsed})
 				return false
 			}
-			elapsed := time.Since(t0).Round(time.Millisecond)
-			logOK(elapsed.String())
+			elapsed := time.Since(t0).Milliseconds()
+			emitProgress(ProgressEvent{Type: "step_done", Step: step, Total: total, Name: name, Status: "ok", ElapsedMs: elapsed, Progress: step * 100 / total})
 			saveState(name)
-			logMsg("")
 			return true
 		}
 
@@ -221,15 +219,8 @@ var provisionCmd = &cobra.Command{
 			}
 		}
 
-		elapsed := time.Since(start).Round(time.Second)
-		logMsg("=== Provisioning complete ===")
-		logMsg("VPS IP: %s", getIP())
-		logMsg("Total time: %s", elapsed)
-		logMsg("Done!")
-		logMsg("\nNext steps:")
-		logMsg("  1. Verify SSH from a new session: ssh %s", vpsName)
-		logMsg("  2. Run: mf audit (check security score)")
-		logMsg("  3. Clone repos: git clone ... /code/anywaye/<repo>")
+		elapsed := time.Since(start)
+		emitProgress(ProgressEvent{Type: "complete", Status: "success", ElapsedMs: elapsed.Milliseconds(), Progress: 100, Message: "Provisioning complete"})
 		return nil
 	},
 }
@@ -240,6 +231,7 @@ func init() {
 	provisionCmd.Flags().StringVar(&allowDBFrom, "allow-db-from", "", "Allow specific IP on DB ports (PostgreSQL, PgBouncer)")
 	provisionCmd.Flags().BoolVar(&provisionDryRun, "dry-run", false, "Preview without executing")
 	provisionCmd.Flags().BoolVar(&provisionForce, "force", false, "Re-run all steps (ignore saved state)")
+	provisionCmd.Flags().BoolVar(&jsonMode, "json", false, "Output progress as NDJSON (machine-parseable)")
 	provisionCmd.MarkFlagRequired("mode")
 }
 

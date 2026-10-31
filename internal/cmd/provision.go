@@ -17,6 +17,7 @@ var (
 	provisionProject  string
 	allowDBFrom       string
 	provisionDryRun   bool
+	provisionForce    bool
 )
 
 var provisionCmd = &cobra.Command{
@@ -30,6 +31,11 @@ var provisionCmd = &cobra.Command{
 
 		loadEnv()
 
+		if provisionForce {
+			os.Remove("/tmp/mainframe-provision.state")
+			logMsg("Force mode: re-running all steps")
+		}
+
 		if os.Getenv("TAILSCALE_AUTHKEY") == "" {
 			return fmt.Errorf("TAILSCALE_AUTHKEY is not set. Set it in .env or environment.\n  Hint: generate one at https://console.tailscale.com/admin/settings/keys")
 		}
@@ -40,30 +46,55 @@ var provisionCmd = &cobra.Command{
 		baseDir := getEnv("BASE_DIR", "/code")
 		vpsName := getEnv("VPS_NAME", "mainframe")
 
-		fmt.Printf("=== Provisioning %s (mode: %s) ===\n", vpsName, provisionMode)
-		fmt.Printf("Base dir: %s\n", baseDir)
-		fmt.Printf("Dry run: %v\n\n", provisionDryRun)
+		initLogging()
+		defer closeLogging()
+
+		logMsg("=== Provisioning %s (mode: %s) ===", vpsName, provisionMode)
+		logMsg("Base dir: %s", baseDir)
+		logMsg("Dry run: %v", provisionDryRun)
+		logMsg("")
 
 		start := time.Now()
 		step := 0
 		total := 8
 
+		stateFile := "/tmp/mainframe-provision.state"
+		saveState := func(s string) {
+			f, _ := os.OpenFile(stateFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if f != nil {
+				fmt.Fprintln(f, s)
+				f.Close()
+			}
+		}
+		hasState := func(s string) bool {
+			data, _ := os.ReadFile(stateFile)
+			return strings.Contains(string(data), s)
+		}
+
 		runStep := func(name string, fn func() error) bool {
 			step++
 			t0 := time.Now()
-			fmt.Printf("[%d/%d] %s...\n", step, total, name)
+			logStep(step, total, name)
 			if provisionDryRun {
-				fmt.Printf("  (dry-run: skipped)\n\n")
+				logMsg("  (dry-run: skipped)")
+				logMsg("")
+				return true
+			}
+			if hasState(name) && !provisionForce {
+				logMsg("  (already completed, skipping)")
+				logMsg("")
 				return true
 			}
 			if err := fn(); err != nil {
 				elapsed := time.Since(t0).Round(time.Millisecond)
-				fmt.Printf("  FAILED (%s): %v\n", elapsed, err)
-				fmt.Printf("  Hint: check the output above for details. Re-run provision to retry.\n\n")
+				logFail(elapsed.String(), err, "check the output above for details. Re-run provision to retry.")
+				logMsg("")
 				return false
 			}
 			elapsed := time.Since(t0).Round(time.Millisecond)
-			fmt.Printf("  OK (%s)\n\n", elapsed)
+			logOK(elapsed.String())
+			saveState(name)
+			logMsg("")
 			return true
 		}
 
@@ -75,7 +106,7 @@ var provisionCmd = &cobra.Command{
 				return err
 			}
 			osFamily = f
-			fmt.Printf("  OS family: %s\n", osFamily)
+			logMsg("  OS family: %s", osFamily)
 			return nil
 		}) {
 			return fmt.Errorf("OS detection failed")
@@ -89,8 +120,8 @@ var provisionCmd = &cobra.Command{
 			pkgConf := findAsset("packages.conf")
 			if pkgConf != "" {
 				if err := runScriptWithArgs("lib/packages.sh", pkgConf); err != nil {
-					fmt.Printf("  Warning: package installation had issues: %v\n", err)
-					fmt.Printf("  Hint: some packages may need manual installation\n")
+					logMsg("  Warning: package installation had issues: %v", err)
+					logMsg("  Hint: some packages may need manual installation")
 				}
 			}
 			return nil
@@ -101,7 +132,7 @@ var provisionCmd = &cobra.Command{
 		// Step 3: Tailscale
 		if !runStep("Setting up Tailscale", func() error {
 			if os.Getenv("TAILSCALE_ENABLED") == "false" {
-				fmt.Println("  Skipped (TAILSCALE_ENABLED=false)")
+				logMsg("  Skipped (TAILSCALE_ENABLED=false)")
 				return nil
 			}
 			if err := runScript("lib/tailscale.sh"); err != nil {
@@ -115,7 +146,7 @@ var provisionCmd = &cobra.Command{
 		// Step 4: Hardening
 		if !runStep("Applying hardening", func() error {
 			if os.Getenv("HARDEN_ENABLED") == "false" {
-				fmt.Println("  Skipped (HARDEN_ENABLED=false)")
+				logMsg("  Skipped (HARDEN_ENABLED=false)")
 				return nil
 			}
 			if err := runScript("lib/harden.sh"); err != nil {
@@ -148,8 +179,8 @@ var provisionCmd = &cobra.Command{
 		if !runStep("Setting up secrets", func() error {
 			if err := runScript("lib/secrets.sh"); err != nil {
 				// secrets.sh exits 0 when BW_EMAIL is not set (optional)
-				fmt.Printf("  Warning: %v\n", err)
-				fmt.Println("  Hint: set BW_EMAIL and re-run for Bitwarden setup")
+				logMsg("  Warning: %v", err)
+				logMsg("  Hint: set BW_EMAIL and re-run for Bitwarden setup")
 			}
 			return nil
 		}) {
@@ -182,21 +213,21 @@ var provisionCmd = &cobra.Command{
 		}
 
 		if provisionProject != "" {
-			fmt.Printf("Setting up project: %s...\n", provisionProject)
+			logMsg("Setting up project: %s...", provisionProject)
 			if err := runScript("projects/" + provisionProject + "/setup.sh"); err != nil {
-				fmt.Printf("  Warning: project setup failed: %v\n", err)
+				logMsg("  Warning: project setup failed: %v", err)
 			}
 		}
 
 		elapsed := time.Since(start).Round(time.Second)
-		fmt.Println("=== Provisioning complete ===")
-		fmt.Printf("VPS IP: %s\n", getIP())
-		fmt.Printf("Total time: %s\n", elapsed)
-		fmt.Println("Done!")
-		fmt.Println("\nNext steps:")
-		fmt.Println("  1. Verify SSH from a new session: ssh " + vpsName)
-		fmt.Println("  2. Run: mf audit (check security score)")
-		fmt.Println("  3. Clone repos: git clone ... /code/anywaye/<repo>")
+		logMsg("=== Provisioning complete ===")
+		logMsg("VPS IP: %s", getIP())
+		logMsg("Total time: %s", elapsed)
+		logMsg("Done!")
+		logMsg("\nNext steps:")
+		logMsg("  1. Verify SSH from a new session: ssh %s", vpsName)
+		logMsg("  2. Run: mf audit (check security score)")
+		logMsg("  3. Clone repos: git clone ... /code/anywaye/<repo>")
 		return nil
 	},
 }
@@ -206,6 +237,7 @@ func init() {
 	provisionCmd.Flags().StringVar(&provisionProject, "project", "", "Project name to set up after provisioning")
 	provisionCmd.Flags().StringVar(&allowDBFrom, "allow-db-from", "", "Allow specific IP on DB ports (PostgreSQL, PgBouncer)")
 	provisionCmd.Flags().BoolVar(&provisionDryRun, "dry-run", false, "Preview without executing")
+	provisionCmd.Flags().BoolVar(&provisionForce, "force", false, "Re-run all steps (ignore saved state)")
 	provisionCmd.MarkFlagRequired("mode")
 }
 
@@ -274,7 +306,19 @@ func runScriptWithArgs(relPath string, args ...string) error {
 	cmd := exec.Command("bash", append([]string{scriptPath}, args...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	// 10 minute timeout per script
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(10 * time.Minute):
+		cmd.Process.Kill()
+		return fmt.Errorf("script timed out after 10 minutes: %s", relPath)
+	}
 }
 
 func ensureAssets() string {

@@ -13,7 +13,23 @@ if ! command -v tailscale &>/dev/null; then
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 
-tailscale up --authkey="$TAILSCALE_AUTHKEY"
+# Wait for tailscaled to be ready
+for i in $(seq 1 10); do
+  if tailscale status >/dev/null 2>&1 || [ "$(tailscale status 2>&1 | head -1)" != "" ]; then
+    break
+  fi
+  sleep 1
+done
+
+# Retry tailscale up
+for i in $(seq 1 3); do
+  if tailscale up --authkey="$TAILSCALE_AUTHKEY" 2>&1; then
+    break
+  fi
+  echo "[tailscale] Retry $i/3..."
+  sleep 2
+done
+
 echo "Tailscale: connected"
 echo "  Tailscale IP: $(tailscale ip -4 2>/dev/null || echo 'check tailscale status')"
 

@@ -3,6 +3,8 @@
 # Applies a solid security baseline. Optional extras are env-gated.
 # Assets (config templates) are in assets/. Copy, fill placeholders, validate, apply.
 set -uo pipefail
+# Non-fatal mode: individual steps can fail without aborting
+HARDEN_ERRORS=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSETS_DIR="$SCRIPT_DIR/../assets"
@@ -277,6 +279,13 @@ TIMER
   systemctl daemon-reload 2>/dev/null || true
   systemctl enable --now mainframe-tailscale-watchdog.timer 2>/dev/null || true
   echo "[harden] Tailscale watchdog installed (restarts tailscaled if it crashes)"
+fi
+
+# Summary
+echo ""
+echo "[harden] Hardening complete. Errors: $HARDEN_ERRORS"
+if [ "$HARDEN_ERRORS" -gt 0 ]; then
+  echo "[harden] WARNING: Some steps had errors. Review output above."
 fi
 
 # Commit etckeeper

@@ -281,6 +281,12 @@ TIMER
   echo "[harden] Tailscale watchdog installed (restarts tailscaled if it crashes)"
 fi
 
+# Crash prevention (memory, disk, CPU, process protection)
+if [ -f "$SCRIPT_DIR/crash-prevention.sh" ]; then
+  echo "[harden] Applying crash prevention..."
+  bash "$SCRIPT_DIR/crash-prevention.sh" 2>&1 | tail -5
+fi
+
 # Summary
 echo ""
 echo "[harden] Hardening complete. Errors: $HARDEN_ERRORS"

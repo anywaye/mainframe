@@ -1064,6 +1064,33 @@ else
   info tailscale.connected "Tailscale not installed"
 fi
 
+# --------------------------------------------------------------- crash prevention ---
+section crash
+if command -v earlyoom >/dev/null 2>&1; then
+  if systemctl is-active --quiet earlyoom 2>/dev/null; then
+    pass crash.earlyoom "earlyoom active (kills memory hogs before system OOM)"
+  else
+    warn crash.earlyoom "earlyoom installed but not active"
+  fi
+else
+  warn crash.earlyoom "earlyoom not installed — system may OOM during heavy builds"
+fi
+if [ -f /etc/cron.daily/docker-cleanup ]; then
+  pass crash.docker_cleanup "Docker cleanup cron installed (daily)"
+else
+  warn crash.docker_cleanup "No Docker cleanup cron — disk may fill up"
+fi
+if [ -x /usr/local/bin/mainframe-resource-monitor ]; then
+  pass crash.resource_monitor "Resource monitor installed (checks every 5 min)"
+else
+  warn crash.resource_monitor "No resource monitor — memory/disk/CPU spikes may go unnoticed"
+fi
+if grep -q "OOMScoreAdjust=-1000" /etc/systemd/system/tailscaled.service.d/*.conf 2>/dev/null || grep -q "OOMScoreAdjust=-1000" /etc/systemd/system/ssh.service.d/*.conf 2>/dev/null; then
+  pass crash.oom_protection "OOM protection enabled for critical services"
+else
+  warn crash.oom_protection "OOM protection not enabled — critical services may be killed by OOM killer"
+fi
+
 # --------------------------------------------------------------- services ---
 section services
 if have systemctl && systemctl list-units --no-legend >/dev/null 2>&1; then

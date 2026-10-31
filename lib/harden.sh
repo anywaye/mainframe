@@ -47,6 +47,17 @@ if command -v lynis &>/dev/null || apt-get install -y -qq lynis 2>/dev/null; the
   fi
 fi
 
+# 0. Console access check (lockout prevention)
+# Before disabling password SSH, verify console access exists.
+ROOT_PW_STATUS=$(passwd -S root 2>/dev/null | awk '{print $2}' || echo "unknown")
+if [ "$ROOT_PW_STATUS" = "L" ] || [ "$ROOT_PW_STATUS" = "LK" ]; then
+  echo "[harden] WARNING: root password is locked. If SSH keys fail, you will be locked out."
+  echo "[harden] Set a root password for console access: passwd root"
+  echo "[harden] Or ensure your provider's web console (VNC/serial) is accessible."
+  echo "[harden] Continuing in 5 seconds... (Ctrl+C to abort)"
+  sleep 5
+fi
+
 # 1. SSH hardening (sane defaults, idempotent)
 if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
   if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ] && grep -q "PermitRootLogin no" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null; then
@@ -232,6 +243,34 @@ fi
 if [ "$HARDEN_CORE_DUMPS" = "true" ]; then
   echo "kernel.core_pattern = |/bin/false" > /etc/sysctl.d/99-core-dumps.conf 2>/dev/null || true
   sysctl --system >/dev/null 2>&1 || true
+fi
+
+# Tailscale deadman: restart tailscale if it crashes
+if command -v tailscale &>/dev/null; then
+  cat > /etc/systemd/system/mainframe-tailscale-watchdog.service << 'SVC'
+[Unit]
+Description=Mainframe Tailscale watchdog
+After=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'systemctl is-active --quiet tailscaled || systemctl restart tailscaled'
+SVC
+  cat > /etc/systemd/system/mainframe-tailscale-watchdog.timer << 'TIMER'
+[Unit]
+Description=Mainframe Tailscale watchdog timer
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+Unit=mainframe-tailscale-watchdog.service
+
+[Install]
+WantedBy=timers.target
+TIMER
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable --now mainframe-tailscale-watchdog.timer 2>/dev/null || true
+  echo "[harden] Tailscale watchdog installed (restarts tailscaled if it crashes)"
 fi
 
 # Commit etckeeper

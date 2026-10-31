@@ -25,7 +25,7 @@ ufw allow in on tailscale0 comment 'tailnet'
 ```
 - Exit node: needs `net.ipv4.ip_forward=1` (and `net.ipv6.conf.all.forwarding=1`), `rp_filter=2` (kernel.md), `tailscale up --advertise-exit-node`, and approval in the admin console.
 - Subnet router: same forwarding and `rp_filter`, `tailscale up --advertise-routes=10.0.0.0/24`, approve the route in the admin console, and clients run `tailscale up --accept-routes`.
-- `tailscale up --ssh` lets Tailscale handle SSH auth through tailnet ACLs. It's a valid alternative to keys, but it moves trust to the Tailscale account. Make sure the user understands that before enabling it.
+- **Do NOT use `tailscale up --ssh`.** Tailscale SSH intercepts port 22 and creates a single point of failure: if the Tailscale daemon crashes (e.g., during a heavy build), SSH becomes unreachable via BOTH the Tailscale IP and the public IP (firewall blocks it). Use OpenSSH with key-based auth instead. mainframe's tailscale.sh does not enable Tailscale SSH.
 - Turn on key expiry and MFA on the identity provider. The tailnet is now part of the server's perimeter.
 
 ## WireGuard server

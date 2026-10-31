@@ -68,5 +68,23 @@ if [ -n "$FIREWALL_EXTRA_PORTS" ]; then
   echo "[firewall] Extra ports opened: $FIREWALL_EXTRA_PORTS"
 fi
 
+# Safety: verify SSH is working before enabling firewall
+# If SSH is not accessible, enabling the firewall could lock us out.
+if [ "$FIREWALL_MODE" = "tailscale-only" ]; then
+  if ! tailscale status >/dev/null 2>&1; then
+    echo "[firewall] WARNING: Tailscale is not connected. tailscale-only mode will block ALL SSH."
+    echo "[firewall] Aborting firewall enable. Fix Tailscale first, then re-run."
+    exit 1
+  fi
+  # Verify we can reach the Tailscale IP
+  TS_IP=$(tailscale ip -4 2>/dev/null || echo "")
+  if [ -z "$TS_IP" ]; then
+    echo "[firewall] WARNING: No Tailscale IP. Cannot verify SSH access."
+    echo "[firewall] Aborting firewall enable."
+    exit 1
+  fi
+  echo "[firewall] Tailscale IP: $TS_IP — SSH will be allowed via Tailscale"
+fi
+
 ufw --force enable
 echo "[firewall] Firewall enabled"

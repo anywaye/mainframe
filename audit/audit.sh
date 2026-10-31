@@ -551,8 +551,8 @@ if need_root accounts.passwords "reading /etc/shadow"; then
   if [[ -n "$empty" ]]; then fail accounts.passwords "accounts with EMPTY password: $empty"
   else pass accounts.passwords "no empty passwords"; fi
   rootpw=$(awk -F: '$1=="root"{print substr($2,1,1)}' /etc/shadow)
-  if [[ "$rootpw" == '$' ]]; then info accounts.root_password "root has a password (OK for console access; keep it strong and offline)"
-  else info accounts.root_password "root password locked/unset"; fi
+  if [[ "$rootpw" == '$' ]]; then pass accounts.root_password "root has a password (OK for console access; keep it strong and offline)"
+  else warn accounts.root_password "root password locked/unset — set one with: passwd root (needed for provider console access)"; fi
 fi
 
 sudoers=$(getent group sudo 2>/dev/null | cut -d: -f4)

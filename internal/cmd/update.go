@@ -76,6 +76,8 @@ var updateCmd = &cobra.Command{
 		if err := c.Run(); err != nil {
 			return fmt.Errorf("failed to download: %w", err)
 		}
+		// Make executable
+		os.Chmod(tmp, 0755)
 
 		// Verify
 		out, err = exec.Command(tmp, "version").Output()

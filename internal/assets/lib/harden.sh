@@ -8,6 +8,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSETS_DIR="$SCRIPT_DIR/../assets"
 AUDIT_DIR="$SCRIPT_DIR/../audit"
 
+# Validate running as root
+if [ "$(id -u)" -ne 0 ]; then
+  echo "[harden] ERROR: must run as root (use sudo)." >&2
+  exit 1
+fi
+
 # Sane defaults (all true unless explicitly disabled)
 HARDEN_SSH_CRYPTO="${HARDEN_SSH_CRYPTO:-true}"
 HARDEN_BBR="${HARDEN_BBR:-true}"

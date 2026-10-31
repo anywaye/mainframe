@@ -4,6 +4,23 @@ set -euo pipefail
 
 MODE="${1:-dev}"
 FIREWALL_MODE="${2:-}"
+
+# Validate mode
+if [ "$MODE" != "dev" ] && [ "$MODE" != "prod" ]; then
+  echo "[firewall] ERROR: invalid mode '$MODE'. Use 'dev' or 'prod'." >&2
+  exit 1
+fi
+
+# Validate firewall mode
+if [ -n "$FIREWALL_MODE" ]; then
+  case "$FIREWALL_MODE" in
+    tailscale-only|public|custom) ;;
+    *)
+      echo "[firewall] ERROR: invalid firewall mode '$FIREWALL_MODE'. Use 'tailscale-only', 'public', or 'custom'." >&2
+      exit 1
+      ;;
+  esac
+fi
 FIREWALL_EXTRA_PORTS="${3:-}"
 ALLOW_DB_FROM="${4:-${ALLOW_DB_FROM:-}}"
 if [ -z "$FIREWALL_MODE" ]; then

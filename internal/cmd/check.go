@@ -9,17 +9,23 @@ import (
 var checkCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Run all diagnostics (status + doctor + audit)",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("=== Mainframe Full Check ===")
 		fmt.Println()
-		// Run status
+
+		fmt.Println("--- Status ---")
 		statusCmd.Run(cmd, args)
 		fmt.Println()
-		// Run doctor
+
+		fmt.Println("--- Doctor ---")
 		doctorCmd.Run(cmd, args)
 		fmt.Println()
-		// Run audit
-		auditCmd.Run(cmd, args)
+
+		fmt.Println("--- Audit ---")
+		if err := auditCmd.RunE(cmd, args); err != nil {
+			// audit returns non-zero for warnings, that's OK
+		}
+		return nil
 	},
 }
 

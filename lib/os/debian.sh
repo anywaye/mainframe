@@ -25,6 +25,9 @@ install_go() {
   rm /tmp/go.tar.gz
   echo 'export PATH=$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh
   export PATH=$PATH:/usr/local/go/bin
+  # Create symlinks so go is available in non-login shells
+  ln -sf /usr/local/go/bin/go /usr/local/bin/go
+  ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
   echo "[debian] Go $version installed"
 }
 

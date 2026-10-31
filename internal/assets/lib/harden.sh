@@ -139,7 +139,7 @@ if [ "$HARDEN_BBR" = "true" ]; then
   # Apply sysctl to all interfaces including specific ones
   sysctl --system >/dev/null 2>&1 || true
   # Per-interface overrides for common interface names
-  for iface in eth0 ens3 enp0s3 eno1; do
+  for iface in eth0 ens3 enp0s3 eno1 tailscale0; do
     if ip link show "$iface" >/dev/null 2>&1; then
       sysctl -w "net.ipv4.conf.$iface.accept_redirects=0" >/dev/null 2>&1 || true
       sysctl -w "net.ipv4.conf.$iface.send_redirects=0" >/dev/null 2>&1 || true

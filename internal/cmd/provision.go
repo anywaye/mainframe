@@ -31,8 +31,10 @@ var provisionCmd = &cobra.Command{
 
 		loadEnv()
 
+		os.MkdirAll("/var/lib/mainframe", 0755)
+
 		if provisionForce {
-			os.Remove("/tmp/mainframe-provision.state")
+			os.Remove("/var/lib/mainframe/provision.state")
 			logMsg("Force mode: re-running all steps")
 		}
 
@@ -58,7 +60,7 @@ var provisionCmd = &cobra.Command{
 		step := 0
 		total := 8
 
-		stateFile := "/tmp/mainframe-provision.state"
+		stateFile := "/var/lib/mainframe/provision.state"
 		saveState := func(s string) {
 			f, _ := os.OpenFile(stateFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 			if f != nil {

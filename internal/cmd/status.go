@@ -28,13 +28,18 @@ var statusCmd = &cobra.Command{
 
 		// Tools
 		fmt.Println("Tools:")
-		tools := []string{"mf", "tailscale", "docker", "go", "node", "gh", "helm", "psql", "ufw", "fail2ban", "lynis"}
+		tools := []string{"mf", "tailscale", "docker", "go", "node", "gh", "helm", "psql", "ufw", "fail2ban-client", "lynis"}
+		toolNames := map[string]string{"fail2ban-client": "fail2ban"}
 		for _, t := range tools {
+			display := t
+			if n, ok := toolNames[t]; ok {
+				display = n
+			}
 			path, err := exec.LookPath(t)
 			if err != nil {
-				fmt.Printf("  %-12s NOT INSTALLED\n", t)
+				fmt.Printf("  %-12s NOT INSTALLED\n", display)
 			} else {
-				fmt.Printf("  %-12s %s\n", t, path)
+				fmt.Printf("  %-12s %s\n", display, path)
 			}
 		}
 		fmt.Println()
@@ -73,11 +78,16 @@ var statusCmd = &cobra.Command{
 
 		// SSH
 		fmt.Println("SSH:")
-		sshdOut, _ := exec.Command("sshd", "-T").Output()
+		sshdOut, _ := exec.Command("sudo", "sshd", "-T").Output()
+		found := false
 		for _, line := range strings.Split(string(sshdOut), "\n") {
 			if strings.HasPrefix(line, "permitrootlogin") || strings.HasPrefix(line, "passwordauthentication") || strings.HasPrefix(line, "allowgroups") {
 				fmt.Printf("  %s\n", line)
+				found = true
 			}
+		}
+		if !found {
+			fmt.Println("  (could not read sshd config)")
 		}
 		fmt.Println()
 

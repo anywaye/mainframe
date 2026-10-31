@@ -23,8 +23,13 @@ if ! command -v earlyoom >/dev/null 2>&1; then
   apt-get install -y -qq earlyoom 2>&1 | tail -1 || true
 fi
 if command -v earlyoom >/dev/null 2>&1; then
+  # Configure earlyoom to avoid killing critical services
+  cat > /etc/default/earlyoom << 'EOF'
+EARLYOOM_ARGS="-r 60 --avoid '(^|/)(init|sshd|tailscaled|dockerd|containerd)$'"
+EOF
+  systemctl restart earlyoom 2>/dev/null || true
   systemctl enable --now earlyoom 2>/dev/null || true
-  echo "[crash-prevention] earlyoom enabled"
+  echo "[crash-prevention] earlyoom enabled (avoids sshd, tailscaled, docker)"
 fi
 
 # --- 3. Docker cleanup cron ---

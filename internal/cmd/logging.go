@@ -26,7 +26,9 @@ func logMsg(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	ts := time.Now().Format("2006-01-02 15:04:05")
 	line := fmt.Sprintf("[%s] %s", ts, msg)
-	fmt.Println(line)
+	if !jsonMode {
+		fmt.Println(line)
+	}
 	if logFile != nil {
 		fmt.Fprintln(logFile, line)
 	}

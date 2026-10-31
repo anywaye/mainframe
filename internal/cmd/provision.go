@@ -158,11 +158,11 @@ var provisionCmd = &cobra.Command{
 		if !runStep("Configuring firewall", func() error {
 			firewallMode := getEnv("FIREWALL_MODE", "")
 			if firewallMode == "" {
-				if provisionMode == "dev" {
-					firewallMode = "tailscale-only"
-				} else {
-					firewallMode = "public"
-				}
+				// Default to "public" (SSH on port 22) for safety.
+				// tailscale-only mode blocks all SSH if Tailscale crashes,
+				// which can lock you out. Use tailscale-only only if you
+				// have a working Tailscale connection AND a console password.
+				firewallMode = "public"
 			}
 			if err := runScriptWithArgs("lib/firewall.sh", provisionMode, firewallMode, os.Getenv("FIREWALL_EXTRA_PORTS"), allowDBFrom); err != nil {
 				return fmt.Errorf("firewall failed: %w", err)

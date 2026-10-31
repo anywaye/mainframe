@@ -1045,6 +1045,25 @@ if have journalctl; then
   [[ -n "$ju" ]] && info resources.journal_size "journal uses $ju"
 fi
 
+# --------------------------------------------------------------- tailscale ---
+section tailscale
+if command -v tailscale >/dev/null 2>&1; then
+  if tailscale status >/dev/null 2>&1; then
+    ts_ip=$(tailscale ip -4 2>/dev/null || echo "unknown")
+    pass tailscale.connected "Tailscale connected (IP: $ts_ip)"
+    # Check if tailscaled has OOM protection
+    if grep -q "OOMScoreAdjust=-1000" /etc/systemd/system/tailscaled.service.d/*.conf 2>/dev/null; then
+      pass tailscale.oom "OOM protection enabled (tailscaled won't be killed by OOM killer)"
+    else
+      warn tailscale.oom "OOM protection not enabled — tailscaled may be killed during heavy builds. Run: mf harden"
+    fi
+  else
+    fail tailscale.connected "Tailscale NOT connected — SSH may be locked out if firewall is tailscale-only"
+  fi
+else
+  info tailscale.connected "Tailscale not installed"
+fi
+
 # --------------------------------------------------------------- services ---
 section services
 if have systemctl && systemctl list-units --no-legend >/dev/null 2>&1; then

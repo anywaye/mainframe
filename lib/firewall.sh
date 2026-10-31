@@ -24,11 +24,11 @@ fi
 FIREWALL_EXTRA_PORTS="${3:-}"
 ALLOW_DB_FROM="${4:-${ALLOW_DB_FROM:-}}"
 if [ -z "$FIREWALL_MODE" ]; then
-  if [ "$MODE" = "dev" ]; then
-    FIREWALL_MODE="tailscale-only"
-  else
-    FIREWALL_MODE="public"
-  fi
+  # Default to "public" (SSH on port 22) for safety.
+  # tailscale-only mode blocks all SSH if Tailscale crashes.
+  # Use tailscale-only only if you have a working Tailscale connection
+  # AND a console password for recovery.
+  FIREWALL_MODE="public"
 fi
 
 if ! command -v ufw &>/dev/null; then

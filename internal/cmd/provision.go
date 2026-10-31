@@ -146,6 +146,10 @@ var provisionCmd = &cobra.Command{
 				logMsg("  Skipped (HARDEN_ENABLED=false)")
 				return nil
 			}
+			forceSsh, _ := cmd.Flags().GetBool("force-ssh")
+			if forceSsh {
+				os.Setenv("FORCE_SSH", "true")
+			}
 			if err := runScript("lib/harden.sh"); err != nil {
 				return fmt.Errorf("hardening failed: %w", err)
 			}
@@ -163,6 +167,10 @@ var provisionCmd = &cobra.Command{
 				// which can lock you out. Use tailscale-only only if you
 				// have a working Tailscale connection AND a console password.
 				firewallMode = "public"
+			}
+			forceFw, _ := cmd.Flags().GetBool("force-firewall")
+			if forceFw {
+				os.Setenv("FORCE_FIREWALL", "true")
 			}
 			if err := runScriptWithArgs("lib/firewall.sh", provisionMode, firewallMode, os.Getenv("FIREWALL_EXTRA_PORTS"), allowDBFrom); err != nil {
 				return fmt.Errorf("firewall failed: %w", err)
@@ -229,6 +237,8 @@ func init() {
 	provisionCmd.Flags().BoolVar(&provisionDryRun, "dry-run", false, "Preview without executing")
 	provisionCmd.Flags().BoolVar(&provisionForce, "force", false, "Re-run all steps (ignore saved state)")
 	provisionCmd.Flags().BoolVar(&jsonMode, "json", false, "Output progress as NDJSON (machine-parseable)")
+	provisionCmd.Flags().Bool("force-firewall", false, "Override existing firewall rules")
+	provisionCmd.Flags().Bool("force-ssh", false, "Override existing SSH config")
 	provisionCmd.MarkFlagRequired("mode")
 }
 

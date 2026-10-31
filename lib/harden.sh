@@ -66,6 +66,17 @@ if [ "$ROOT_PW_STATUS" = "L" ] || [ "$ROOT_PW_STATUS" = "LK" ]; then
   sleep 5
 fi
 
+# Check for existing SSH config customizations
+FORCE_SSH="${FORCE_SSH:-false}"
+EXISTING_SSH_CONFIGS=$(ls /etc/ssh/sshd_config.d/*.conf 2>/dev/null | grep -v "00-mainframe.conf" | grep -v "50-cloud-init.conf" || true)
+if [ -n "$EXISTING_SSH_CONFIGS" ] && [ "$FORCE_SSH" != "true" ]; then
+  echo "[harden] Existing SSH config found:"
+  for f in $EXISTING_SSH_CONFIGS; do echo "  $f"; done
+  echo "[harden] Skipping SSH hardening to preserve existing config."
+  echo "[harden] To override: set FORCE_SSH=true"
+  HARDEN_SSH_CRYPTO="false"
+fi
+
 # 1. SSH hardening (sane defaults, idempotent)
 if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
   if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ] && grep -q "PermitRootLogin no" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null; then

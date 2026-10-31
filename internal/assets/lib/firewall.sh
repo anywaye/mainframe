@@ -23,6 +23,29 @@ if [ -n "$FIREWALL_MODE" ]; then
 fi
 FIREWALL_EXTRA_PORTS="${3:-}"
 ALLOW_DB_FROM="${4:-${ALLOW_DB_FROM:-}}"
+
+# --- Existing firewall detection ---
+# Check if ufw already has rules (existing VPS)
+EXISTING_RULES=""
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "ALLOW\|DENY"; then
+  EXISTING_RULES=$(ufw status numbered 2>/dev/null | grep -E "ALLOW|DENY" || true)
+fi
+
+FORCE_FIREWALL="${FORCE_FIREWALL:-false}"
+if [ -n "$EXISTING_RULES" ] && [ "$FORCE_FIREWALL" != "true" ]; then
+  echo "[firewall] Existing firewall rules detected:"
+  echo "$EXISTING_RULES" | while IFS= read -r line; do echo "  $line"; done
+  echo "[firewall] Skipping firewall reset to preserve existing rules."
+  echo "[firewall] To override: set FORCE_FIREWALL=true or use --force-firewall"
+  echo "[firewall] Add custom rules to firewall.conf and re-run with FIREWALL_MODE=custom"
+  # Save existing rules to a reference file
+  if [ -n "${PROJECT_DIR:-}" ]; then
+    ufw status numbered > "$PROJECT_DIR/firewall.existing" 2>/dev/null || true
+    echo "[firewall] Existing rules saved to $PROJECT_DIR/firewall.existing"
+  fi
+  exit 0
+fi
+
 if [ -z "$FIREWALL_MODE" ]; then
   # Default to "public" (SSH on port 22) for safety.
   # tailscale-only mode blocks all SSH if Tailscale crashes.

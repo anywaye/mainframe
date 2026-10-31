@@ -58,7 +58,7 @@ var provisionCmd = &cobra.Command{
 
 		start := time.Now()
 		step := 0
-		total := 8
+		total := 7
 
 		stateFile := "/var/lib/mainframe/provision.state"
 		saveState := func(s string) {
@@ -98,19 +98,16 @@ var provisionCmd = &cobra.Command{
 			return true
 		}
 
-		// Step 1: Detect OS
+		// Step 1: Detect OS (always run, fast and idempotent)
 		var osFamily string
-		if !runStep("Detecting OS", func() error {
-			f, err := detectOS()
-			if err != nil {
-				return err
-			}
-			osFamily = f
-			logMsg("  OS family: %s", osFamily)
-			return nil
-		}) {
-			return fmt.Errorf("OS detection failed")
+		f, err := detectOS()
+		if err != nil {
+			return fmt.Errorf("OS detection failed: %w", err)
 		}
+		osFamily = f
+		logMsg("[1/8] Detecting OS...")
+		logMsg("  OS family: %s", osFamily)
+		logMsg("")
 
 		// Step 2: Install packages
 		if !runStep("Installing packages", func() error {

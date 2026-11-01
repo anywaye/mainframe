@@ -1093,7 +1093,7 @@ fi
 
 # --------------------------------------------------------------- sleep prevention ---
 section sleep
-masked=$(systemctl is-enabled sleep.target 2>/dev/null || echo "unknown")
+masked=$(sudo systemctl is-enabled sleep.target 2>/dev/null || echo "unknown")
 if [ "$masked" = "masked" ]; then
   pass sleep.masked "systemd sleep/suspend/hibernate masked (prevents idle shutdown)"
 else

@@ -176,4 +176,21 @@ fi
 
 echo "[crash-prevention] Shutdown logger installed (captures details before any shutdown)"
 
+# --- Anti-idle (prevent Contabo from stopping idle VPSes) ---
+echo "[crash-prevention] Setting up anti-idle (Contabo idle detection workaround)..."
+cat > /usr/local/bin/mainframe-anti-idle << 'IDLEEOF'
+#!/bin/bash
+# Generate light CPU load to prevent Contabo idle detection
+stress --cpu 1 --timeout 5s 2>/dev/null || true
+# Also ping healthchecks.io if configured
+if [ -n "${HEALTHCHECK_URL:-}" ]; then
+  curl -fsS -o /dev/null "$HEALTHCHECK_URL" 2>/dev/null || true
+fi
+IDLEEOF
+chmod +x /usr/local/bin/mainframe-anti-idle
+if ! crontab -l 2>/dev/null | grep -q "mainframe-anti-idle"; then
+  (crontab -l 2>/dev/null || true; echo "* * * * * /usr/local/bin/mainframe-anti-idle") | crontab - 2>/dev/null || true
+  echo "[crash-prevention] Anti-idle cron job installed (runs every minute)"
+fi
+
 echo "[crash-prevention] All crash prevention measures applied."

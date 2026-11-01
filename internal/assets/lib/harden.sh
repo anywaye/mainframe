@@ -298,12 +298,6 @@ if [ -f "$SCRIPT_DIR/crash-prevention.sh" ]; then
   bash "$SCRIPT_DIR/crash-prevention.sh" 2>&1 | tail -5
 fi
 
-# Disable ACPI power button handling (prevents hypervisor-initiated shutdowns)
-mkdir -p /etc/systemd/logind.conf.d 2>/dev/null || true
-printf '[Login]\nHandlePowerKey=ignore\nHandleSuspendKey=ignore\nHandleHibernateKey=ignore\nHandleLidSwitch=ignore\n' > /etc/systemd/logind.conf.d/99-mainframe.conf 2>/dev/null || true
-systemctl restart systemd-logind 2>/dev/null || true
-echo "[harden] ACPI power button handling disabled (prevents hypervisor shutdown signals)"
-
 # Summary
 echo ""
 echo "[harden] Hardening complete. Errors: $HARDEN_ERRORS"

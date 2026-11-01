@@ -1092,14 +1092,6 @@ else
 fi
 
 # --------------------------------------------------------------- services ---
-# --------------------------------------------------------------- acpi / power ---
-section acpi
-if [ -f /etc/systemd/logind.conf.d/99-mainframe.conf ] && grep -q "HandlePowerKey=ignore" /etc/systemd/logind.conf.d/99-mainframe.conf 2>/dev/null; then
-  pass acpi.power_button "ACPI power button handling disabled (prevents hypervisor shutdown)"
-else
-  warn acpi.power_button "ACPI power button handling enabled — hypervisor can shut down the VPS. Run: mf harden"
-fi
-
 # --------------------------------------------------------------- services ---
 section services
 if have systemctl && systemctl list-units --no-legend >/dev/null 2>&1; then

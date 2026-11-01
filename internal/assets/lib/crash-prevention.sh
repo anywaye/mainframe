@@ -111,4 +111,69 @@ if ! crontab -l 2>/dev/null | grep -q "mainframe-resource-monitor"; then
   echo "[crash-prevention] Resource monitor installed (checks every 5 minutes)"
 fi
 
+# Shutdown logger (capture details before any shutdown)
+cat > /usr/local/bin/mainframe-shutdown-logger << 'LOGGER'
+#!/bin/bash
+LOGFILE=/var/log/mainframe-shutdown.log
+TS=$(date '+%Y-%m-%d %H:%M:%S')
+{
+  echo "========================================"
+  echo "SHUTDOWN EVENT at $TS"
+  echo "========================================"
+  echo "Uptime: $(uptime)"
+  echo "Load: $(cat /proc/loadavg 2>/dev/null || echo 'N/A')"
+  echo "Memory: $(free -h 2>/dev/null | head -2 | tail -1 || echo 'N/A')"
+  echo "Disk: $(df -h / | tail -1)"
+  echo ""
+  echo "--- Triggering process ---"
+  systemctl list-jobs 2>/dev/null | head -10
+  echo ""
+  echo "--- Recent journal (last 2 min) ---"
+  journalctl --since "2 minutes ago" 2>/dev/null | tail -30
+  echo ""
+  echo "--- ACPI events ---"
+  dmesg 2>/dev/null | grep -i "acpi\|power\|shutdown" | tail -5
+  echo ""
+  echo "--- Running processes (top 10 by CPU) ---"
+  ps aux --sort=-%cpu 2>/dev/null | head -11
+  echo ""
+  echo "--- System info ---"
+  echo "Hostname: $(hostname)"
+  echo "IP: $(hostname -I 2>/dev/null || hostname -i)"
+  echo "========================================"
+  echo ""
+} >> "$LOGFILE"
+logger -t mainframe-shutdown "Shutdown triggered at $TS"
+LOGGER
+chmod +x /usr/local/bin/mainframe-shutdown-logger
+
+cat > /etc/systemd/system/mainframe-shutdown-logger.service << 'SVC'
+[Unit]
+Description=Mainframe Shutdown Logger
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target poweroff.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mainframe-shutdown-logger
+RemainAfterExit=yes
+TimeoutStartSec=10
+
+[Install]
+WantedBy=multi-user.target
+SVC
+systemctl daemon-reload 2>/dev/null || true
+systemctl enable mainframe-shutdown-logger.service 2>/dev/null || true
+
+# Install acpid for ACPI event logging
+if ! command -v acpid >/dev/null 2>&1; then
+  apt-get install -y -qq acpid 2>&1 | tail -1 || true
+fi
+if command -v acpid >/dev/null 2>&1; then
+  printf 'event=button/power\naction=/usr/local/bin/mainframe-shutdown-logger\n' > /etc/acpi/events/powerbtn 2>/dev/null || true
+  systemctl enable --now acpid 2>/dev/null || true
+fi
+
+echo "[crash-prevention] Shutdown logger installed (captures details before any shutdown)"
+
 echo "[crash-prevention] All crash prevention measures applied."

@@ -3,6 +3,11 @@
 # No public services, no observability, no k3s.
 set -euo pipefail
 
+# Fix npm permissions (npm may have been run as root during package install)
+if [ -d /home/ubuntu/.npm ]; then
+  chown -R ubuntu:ubuntu /home/ubuntu/.npm 2>/dev/null || true
+fi
+
 BASE_DIR="${BASE_DIR:-/code}"
 
 echo "[dev] Setting up dev environment..."

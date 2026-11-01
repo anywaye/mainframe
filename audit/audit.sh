@@ -1091,7 +1091,15 @@ else
   warn crash.oom_protection "OOM protection not enabled — critical services may be killed by OOM killer"
 fi
 
-# --------------------------------------------------------------- services ---
+# --------------------------------------------------------------- sleep prevention ---
+section sleep
+masked=$(systemctl is-enabled sleep.target 2>/dev/null || echo "unknown")
+if [ "$masked" = "masked" ]; then
+  pass sleep.masked "systemd sleep/suspend/hibernate masked (prevents idle shutdown)"
+else
+  warn sleep.masked "systemd sleep not masked — VPS may suspend when idle. Run: mf harden"
+fi
+
 # --------------------------------------------------------------- services ---
 section services
 if have systemctl && systemctl list-units --no-legend >/dev/null 2>&1; then

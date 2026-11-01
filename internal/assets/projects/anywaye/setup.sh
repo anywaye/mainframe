@@ -10,7 +10,7 @@ echo "=== Setting up anywaye project ==="
 mkdir -p "$CODE_DIR"
 cd "$CODE_DIR"
 
-REPOS="ship website identity gateway ella billing courier core darkroom keyholder kit loom notes oauth-stub ops platform press anywaye-py anywaye-rb anywaye-ts"
+REPOS="ship website identity gateway ella billing courier core darkroom keyholder kit loom notes oauth-stub platform press anywaye-py anywaye-rb anywaye-ts"
 for repo in $REPOS; do
   if [ -d "$repo/.git" ]; then
     echo "$repo: pulling..."

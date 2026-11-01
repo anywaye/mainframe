@@ -226,6 +226,24 @@ var provisionCmd = &cobra.Command{
 
 		elapsed := time.Since(start)
 		emitProgress(ProgressEvent{Type: "complete", Status: "success", ElapsedMs: elapsed.Milliseconds(), Progress: 100, Message: "Provisioning complete"})
+
+		// Auto-snapshot: capture current state into project config files
+		if !provisionDryRun {
+			logMsg("Capturing state snapshot...")
+			// Update firewall mode in mainframe.yml based on actual firewall
+			if data, err := os.ReadFile("mainframe.yml"); err == nil {
+				content := string(data)
+				ufwOut, _ := exec.Command("sudo", "ufw", "status").Output()
+				mode := "public"
+				if strings.Contains(string(ufwOut), "100.64.0.0/10") {
+					mode = "tailscale-only"
+				}
+				content = updateYAMLField(content, "firewall", "mode", mode)
+				os.WriteFile("mainframe.yml", []byte(content), 0644)
+				logMsg("  Firewall mode saved: %s", mode)
+			}
+			logMsg("  Run 'mf snapshot --commit --push' to save to git")
+		}
 		return nil
 	},
 }

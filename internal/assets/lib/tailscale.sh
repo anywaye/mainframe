@@ -48,20 +48,17 @@ EOF
   echo "[tailscale] OOM protection enabled (tailscaled will not be killed by OOM killer)"
 fi
 
-# Watchdog: check if tailscaled is actually connected (not just running)
+# Watchdog script (systemd timer handles scheduling, see harden.sh)
 cat > /usr/local/bin/tailscale-watchdog << 'EOF'
 #!/bin/bash
-# Restart tailscaled if it's not responding
+# Restart tailscaled if it's not responding (safety net only)
+# Primary protection: OOMScoreAdjust + earlyoom + memory limits
 if ! tailscale status >/dev/null 2>&1; then
+  logger -t tailscale-watchdog "Tailscale not responding, restarting..."
   systemctl restart tailscaled
   sleep 5
   tailscale up --authkey="${TAILSCALE_AUTHKEY:-}" 2>/dev/null || true
 fi
 EOF
 chmod +x /usr/local/bin/tailscale-watchdog
-
-# Add cron job for watchdog (every minute)
-if ! crontab -l 2>/dev/null | grep -q "tailscale-watchdog"; then
-  (crontab -l 2>/dev/null || true; echo "* * * * * /usr/local/bin/tailscale-watchdog") | crontab - 2>/dev/null || true
-  echo "[tailscale] Watchdog cron job installed (checks every minute)"
-fi
+echo "[tailscale] Watchdog script installed (systemd timer runs every 5 min)"

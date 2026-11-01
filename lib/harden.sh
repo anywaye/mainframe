@@ -280,8 +280,8 @@ SVC
 Description=Mainframe Tailscale watchdog timer
 
 [Timer]
-OnBootSec=60
-OnUnitActiveSec=60
+OnBootSec=300
+OnUnitActiveSec=300
 Unit=mainframe-tailscale-watchdog.service
 
 [Install]

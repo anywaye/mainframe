@@ -150,6 +150,9 @@ export GH_TOKEN="ghp_..."
 # VPS name (default: mainframe)
 # export VPS_NAME="mainframe"
 
+# Uptime monitoring (healthchecks.io, Better Stack, etc.)
+# export HEALTHCHECK_URL="https://hc-ping.com/your-uuid"
+
 # Base code directory (default: /code)
 # export BASE_DIR="/code"
 `

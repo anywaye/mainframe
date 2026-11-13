@@ -42,6 +42,19 @@ if [ -f "$AUDIT_DIR/audit.sh" ]; then
   bash "$AUDIT_DIR/audit.sh" 2>&1 | tail -3 || true
 fi
 
+# Lynis on Linux >= 5.6: CRYP-7902 (entropy estimation) spins for minutes
+# because /dev/random no longer blocks on those kernels (cisofy/lynis#1736).
+# Skip it via custom.prf so the audit completes in a reasonable time.
+KERNEL_MAJOR=$(uname -r | cut -d. -f1)
+KERNEL_MINOR=$(uname -r | cut -d. -f2)
+if [ "$KERNEL_MAJOR" -gt 5 ] || { [ "$KERNEL_MAJOR" -eq 5 ] && [ "$KERNEL_MINOR" -ge 6 ]; }; then
+  mkdir -p /etc/lynis
+  printf 'skip-test=CRYP-7902\n' > /etc/lynis/custom.prf
+  echo "[harden] Kernel >= 5.6 detected; skipping CRYP-7902 (entropy estimation) via /etc/lynis/custom.prf"
+fi
+# Refresh package lists so PKGS-7392 (vulnerable packages) resolves quickly.
+apt-get update >/dev/null 2>&1 || true
+
 # 0. Lynis baseline audit
 LYNIS_BEFORE=""
 if command -v lynis &>/dev/null || apt-get install -y -qq lynis 2>/dev/null; then

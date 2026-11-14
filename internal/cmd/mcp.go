@@ -1,0 +1,313 @@
+package cmd
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/cobra"
+)
+
+var mcpCmd = &cobra.Command{
+	Use:   "mcp",
+	Short: "Manage MCP (Model Context Protocol) servers",
+}
+
+func init() {
+	mcpCmd.AddCommand(mcpListCmd())
+	mcpCmd.AddCommand(mcpInstallCmd())
+	mcpCmd.AddCommand(mcpTestCmd())
+	mcpCmd.AddCommand(mcpSyncCmd())
+	rootCmd.AddCommand(mcpCmd)
+}
+
+func mcpRegistryPath() string {
+	return "mcp/registry.json"
+}
+
+func loadRegistry() (map[string]interface{}, error) {
+	data, err := os.ReadFile(mcpRegistryPath())
+	if err != nil {
+		return nil, err
+	}
+	var reg map[string]interface{}
+	if err := json.Unmarshal(data, &reg); err != nil {
+		return nil, err
+	}
+	return reg, nil
+}
+
+func mcpListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List all MCP servers and their status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+			fmt.Printf("%-25s %-10s %-8s %s\n", "SERVER", "TYPE", "ENABLED", "DESCRIPTION")
+			for name, info := range servers {
+				infoMap := info.(map[string]interface{})
+				sType := infoMap["type"].(string)
+				enabled := infoMap["enabled"].(bool)
+				desc := ""
+				if d, ok := infoMap["description"].(string); ok {
+					desc = d
+				}
+				status := "disabled"
+				if enabled {
+					status = "enabled"
+				}
+				fmt.Printf("%-25s %-10s %-8s %s\n", name, sType, status, desc)
+			}
+			return nil
+		},
+	}
+}
+
+func mcpInstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "install SERVER",
+		Short: "Install an MCP server's dependencies",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+			info, ok := servers[name].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("server %q not found in registry", name)
+			}
+			installPath, ok := info["install"].(string)
+			if !ok || installPath == "" {
+				fmt.Printf("No install script for %s (HTTP server, no binaries needed)\n", name)
+				return nil
+			}
+			fmt.Printf("Installing %s...\n", name)
+			c := exec.Command("bash", installPath)
+			c.Stdout = os.Stdout
+			c.Stderr = os.Stderr
+			return c.Run()
+		},
+	}
+}
+
+func mcpTestCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "test SERVER",
+		Short: "Test an MCP server end-to-end",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+			info, ok := servers[name].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("server %q not found in registry", name)
+			}
+			configPath := info["config"].(string)
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				return err
+			}
+			var serverConfig map[string]interface{}
+			if err := json.Unmarshal(data, &serverConfig); err != nil {
+				return err
+			}
+			sType := serverConfig["type"].(string)
+			fmt.Printf("Testing %s (%s)...\n", name, sType)
+
+			if sType == "http" {
+				url := serverConfig["url"].(string)
+				fmt.Printf("  URL: %s\n", url)
+				// Test with curl
+				c := exec.Command("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", url)
+				out, _ := c.Output()
+				fmt.Printf("  HTTP status: %s\n", string(out))
+				if string(out) == "200" || string(out) == "405" {
+					fmt.Println("  ✅ Server reachable")
+				} else {
+					fmt.Println("  ❌ Server not reachable")
+				}
+			} else {
+				cmd := serverConfig["command"].(string)
+				args := []string{}
+				if a, ok := serverConfig["args"].([]interface{}); ok {
+					for _, arg := range a {
+						args = append(args, arg.(string))
+					}
+				}
+				// Test MCP handshake
+				input := `{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}` + "\n"
+				c := exec.Command(cmd, args...)
+				c.Stdin = strings.NewReader(input)
+				out, err := c.Output()
+				if err != nil {
+					fmt.Printf("  ❌ Failed to start: %v\n", err)
+					return nil
+				}
+				if strings.Contains(string(out), "protocolVersion") {
+					fmt.Println("  ✅ MCP handshake successful")
+				} else {
+					fmt.Printf("  ❌ Unexpected response: %s\n", string(out)[:200])
+				}
+			}
+			return nil
+		},
+	}
+}
+
+func mcpSyncCmd() *cobra.Command {
+	agent := ""
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Generate agent-specific MCP config from registry",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+
+			// Load each server's config
+			type serverDef struct {
+				Name    string                 `json:"-"`
+				Type    string                 `json:"type"`
+				Command string                 `json:"command,omitempty"`
+				Args    []string               `json:"args,omitempty"`
+				Env     map[string]string      `json:"env,omitempty"`
+				URL     string                 `json:"url,omitempty"`
+				Enabled bool                   `json:"-"`
+			}
+			var defs []serverDef
+			for name, info := range servers {
+				infoMap := info.(map[string]interface{})
+				enabled, _ := infoMap["enabled"].(bool)
+				if !enabled {
+					continue
+				}
+				configPath := infoMap["config"].(string)
+				data, err := os.ReadFile(configPath)
+				if err != nil {
+					continue
+				}
+				var def serverDef
+				if err := json.Unmarshal(data, &def); err != nil {
+					continue
+				}
+				def.Name = name
+				def.Enabled = enabled
+				defs = append(defs, def)
+			}
+
+			switch agent {
+			case "zcode", "":
+				// Generate ~/.zcode/cli/config.json
+				zcodeServers := map[string]interface{}{}
+				for _, d := range defs {
+					if d.Type == "http" {
+						zcodeServers[d.Name] = map[string]interface{}{
+							"type": "http",
+							"url":  d.URL,
+						}
+					} else {
+						zcodeServers[d.Name] = map[string]interface{}{
+							"type":    "stdio",
+							"command": d.Command,
+							"args":    d.Args,
+							"env":     d.Env,
+						}
+					}
+				}
+				config := map[string]interface{}{
+					"mcp": map[string]interface{}{
+						"servers": zcodeServers,
+					},
+				}
+				home, _ := os.UserHomeDir()
+				path := filepath.Join(home, ".zcode", "cli", "config.json")
+				os.MkdirAll(filepath.Dir(path), 0755)
+				data, _ := json.MarshalIndent(config, "", "  ")
+				os.WriteFile(path, data, 0644)
+				fmt.Printf("Generated ZCode config: %s (%d servers)\n", path, len(defs))
+
+			case "claude":
+				// Generate ~/.claude.json mcpServers section
+				claudeServers := map[string]interface{}{}
+				for _, d := range defs {
+					if d.Type == "http" {
+						claudeServers[d.Name] = map[string]interface{}{
+							"type": "http",
+							"url":  d.URL,
+						}
+					} else {
+						claudeServers[d.Name] = map[string]interface{}{
+							"type":    "stdio",
+							"command": d.Command,
+							"args":    d.Args,
+							"env":     d.Env,
+						}
+					}
+				}
+				// Read existing .claude.json or create new
+				home, _ := os.UserHomeDir()
+				path := filepath.Join(home, ".claude.json")
+				existing := map[string]interface{}{}
+				if data, err := os.ReadFile(path); err == nil {
+					json.Unmarshal(data, &existing)
+				}
+				existing["mcpServers"] = claudeServers
+				data, _ := json.MarshalIndent(existing, "", "  ")
+				os.WriteFile(path, data, 0644)
+				fmt.Printf("Generated Claude config: %s (%d servers)\n", path, len(defs))
+
+			case "codex":
+				// Generate ~/.codex/config.toml
+				var lines []string
+				for _, d := range defs {
+					lines = append(lines, fmt.Sprintf("[mcp_servers.%s]", d.Name))
+					if d.Type == "http" {
+						lines = append(lines, fmt.Sprintf("url = \"%s\"", d.URL))
+					} else {
+						lines = append(lines, fmt.Sprintf("command = \"%s\"", d.Command))
+						if len(d.Args) > 0 {
+							args := []string{}
+							for _, a := range d.Args {
+								args = append(args, fmt.Sprintf("\"%s\"", a))
+							}
+							lines = append(lines, fmt.Sprintf("args = [%s]", strings.Join(args, ", ")))
+						}
+						if len(d.Env) > 0 {
+							lines = append(lines, "")
+							lines = append(lines, "[mcp_servers." + d.Name + ".env]")
+							for k, v := range d.Env {
+								lines = append(lines, fmt.Sprintf("%s = \"%s\"", k, v))
+							}
+						}
+					}
+					lines = append(lines, "")
+				}
+				home, _ := os.UserHomeDir()
+				dir := filepath.Join(home, ".codex")
+				os.MkdirAll(dir, 0755)
+				path := filepath.Join(dir, "config.toml")
+				os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0644)
+				fmt.Printf("Generated Codex config: %s (%d servers)\n", path, len(defs))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&agent, "agent", "zcode", "Target agent: zcode, claude, or codex")
+	return cmd
+}

@@ -21,6 +21,7 @@ func Execute() error {
 func init() {
 	rootCmd.Version = version
 	rootCmd.AddCommand(provisionCmd)
+	rootCmd.AddCommand(mcpCmd)
 	rootCmd.AddCommand(auditCmd)
 	rootCmd.AddCommand(hardenCmd)
 	rootCmd.AddCommand(newCmd)

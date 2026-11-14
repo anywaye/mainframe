@@ -22,7 +22,7 @@ var newCmd = &cobra.Command{
 			return fmt.Errorf("directory %s already exists", dir)
 		}
 
-		dirs := []string{dir, dir + "/projects/example"}
+		dirs := []string{dir, dir + "/projects/example", dir + "/skills/common", dir + "/mcp", dir + "/dotfiles"}
 		for _, d := range dirs {
 			if err := os.MkdirAll(d, 0755); err != nil {
 				return err
@@ -37,6 +37,11 @@ var newCmd = &cobra.Command{
 			dir + "/.gitignore":                gitignore,
 			dir + "/README.md":                 readmeMD,
 			dir + "/projects/example/setup.sh": exampleSetup,
+			dir + "/sync.sh":                   syncSh,
+			dir + "/mcp/config.json":           mcpConfig,
+			dir + "/sandbox.yml":               sandboxYML,
+			dir + "/skills/common/.gitkeep":    "",
+			dir + "/dotfiles/.gitkeep":         "",
 		}
 		for path, content := range files {
 			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
@@ -44,6 +49,7 @@ var newCmd = &cobra.Command{
 			}
 		}
 		os.Chmod(dir+"/projects/example/setup.sh", 0755)
+		os.Chmod(dir+"/sync.sh", 0755)
 
 		fmt.Printf("Created %s/\n", dir)
 		fmt.Println("Next steps:")
@@ -174,6 +180,85 @@ Thumbs.db
 `
 
 const readmeMD = "# Mainframe project\n\nProvisioned with mf. See https://github.com/anywaye/mainframe for docs.\n"
+
+const syncSh = `#!/usr/bin/env bash
+# sync.sh - sync personal dev configs (skills, MCP, dotfiles)
+# Run after mf provision: bash sync.sh
+set -euo pipefail
+
+CONFIG_REPO="${CONFIG_REPO:-https://github.com/your-org/devbox-config.git}"
+BASE_DIR="${BASE_DIR:-/code}"
+
+echo "=== Syncing dev configs ==="
+
+# Clone config repo
+rm -rf /tmp/devbox-config
+git clone "$CONFIG_REPO" /tmp/devbox-config 2>/dev/null || {
+    echo "Warning: could not clone config repo. Skipping config sync."
+    exit 0
+}
+
+# Sync skills
+if [ -d /tmp/devbox-config/skills ]; then
+    mkdir -p ~/.agents/skills
+    cp -r /tmp/devbox-config/skills/* ~/.agents/skills/
+    echo "Skills synced."
+fi
+
+# Sync MCP config
+if [ -f /tmp/devbox-config/mcp/config.json ]; then
+    mkdir -p ~/.zcode/cli
+    cp /tmp/devbox-config/mcp/config.json ~/.zcode/cli/config.json
+    echo "MCP config synced."
+fi
+
+# Sync dotfiles
+if [ -d /tmp/devbox-config/dotfiles ]; then
+    for f in /tmp/devbox-config/dotfiles/.* /tmp/devbox-config/dotfiles/*; do
+        [ -f "$f" ] && ln -sf "$f" ~/$(basename "$f")
+    done
+    echo "Dotfiles synced."
+fi
+
+# Clone project repos (customize this list)
+# for repo in anywaye boax ship; do
+#     if [ ! -d "$BASE_DIR/$repo" ]; then
+#         git clone "https://$GH_TOKEN@github.com/your-org/$repo.git" "$BASE_DIR/$repo"
+#     else
+#         cd "$BASE_DIR/$repo" && git pull
+#     fi
+# done
+
+# Pull secrets (if bw is available)
+if command -v bw &>/dev/null; then
+    bw sync 2>/dev/null || true
+fi
+
+echo "=== Sync complete ==="
+`
+
+const mcpConfig = `{
+  "mcp": {
+    "servers": {}
+  }
+}
+`
+
+const sandboxYML = `# sandbox.yml - Dev environment spec for boax sandboxes
+# Place this in any project repo under .boax/sandbox.yml
+
+base: ubuntu:24.04
+packages: packages.conf
+provision: sync.sh
+configs:
+  skills: common
+  mcp: common
+  dotfiles: true
+secrets:
+  provider: bitwarden
+  items: []
+repos: []
+`
 
 const exampleSetup = `#!/usr/bin/env bash
 # Example project setup script.

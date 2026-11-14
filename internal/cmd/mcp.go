@@ -18,6 +18,10 @@ var mcpCmd = &cobra.Command{
 
 func init() {
 	mcpCmd.AddCommand(mcpListCmd())
+	mcpCmd.AddCommand(mcpAddCmd())
+	mcpCmd.AddCommand(mcpRemoveCmd())
+	mcpCmd.AddCommand(mcpEnableCmd())
+	mcpCmd.AddCommand(mcpDisableCmd())
 	mcpCmd.AddCommand(mcpInstallCmd())
 	mcpCmd.AddCommand(mcpTestCmd())
 	mcpCmd.AddCommand(mcpApplyCmd())
@@ -161,6 +165,150 @@ func mcpTestCmd() *cobra.Command {
 					fmt.Printf("  FAIL Unexpected response: %s\n", string(out)[:200])
 				}
 			}
+			return nil
+		},
+	}
+}
+
+
+func mcpAddCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "add SERVER",
+		Short: "Add a new MCP server to the registry",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			reg, err := loadRegistry()
+			if err != nil {
+				// Create new registry if it doesn't exist
+				reg = map[string]interface{}{
+					"version": 1,
+					"servers": map[string]interface{}{},
+				}
+			}
+			servers := reg["servers"].(map[string]interface{})
+			if _, exists := servers[name]; exists {
+				return fmt.Errorf("server %q already exists in registry", name)
+			}
+
+			// Create server directory
+			serverDir := filepath.Join("mcp", "servers", name)
+			os.MkdirAll(serverDir, 0755)
+
+			// Create template config.json
+			config := map[string]interface{}{
+				"name":    name,
+				"type":    "stdio",
+				"command": name,
+				"args":    []string{},
+				"env":     map[string]string{},
+				"secrets": map[string]string{},
+			}
+			configData, _ := json.MarshalIndent(config, "", "  ")
+			os.WriteFile(filepath.Join(serverDir, "config.json"), configData, 0644)
+
+			// Create template install.sh
+			install := "#!/usr/bin/env bash\nset -e\necho \"No install steps defined for " + name + "\"\n"
+			os.WriteFile(filepath.Join(serverDir, "install.sh"), []byte(install), 0755)
+
+			// Create template README.md
+			readme := "# " + name + "\n\nMCP server.\n\n## Dependencies\n\nTODO\n\n## Secrets\n\nTODO\n\n## Test\n\n```bash\nmf mcp test " + name + "\n```\n"
+			os.WriteFile(filepath.Join(serverDir, "README.md"), []byte(readme), 0644)
+
+			// Add to registry
+			servers[name] = map[string]interface{}{
+				"type":        "stdio",
+				"enabled":     false,
+				"description": "TODO: add description",
+				"secrets":     []string{},
+				"install":     "mcp/servers/" + name + "/install.sh",
+				"config":      "mcp/servers/" + name + "/config.json",
+			}
+			data, _ := json.MarshalIndent(reg, "", "  ")
+			os.WriteFile(mcpRegistryPath(), data, 0644)
+
+			fmt.Printf("Added server %q to registry (disabled by default)\n", name)
+			fmt.Printf("Edit mcp/servers/%s/config.json to configure\n", name)
+			fmt.Printf("Enable with: mf mcp enable %s\n", name)
+			return nil
+		},
+	}
+}
+
+func mcpRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove SERVER",
+		Short: "Remove an MCP server from the registry",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+			if _, exists := servers[name]; !exists {
+				return fmt.Errorf("server %q not found in registry", name)
+			}
+			delete(servers, name)
+			data, _ := json.MarshalIndent(reg, "", "  ")
+			os.WriteFile(mcpRegistryPath(), data, 0644)
+
+			// Remove server directory
+			serverDir := filepath.Join("mcp", "servers", name)
+			os.RemoveAll(serverDir)
+
+			fmt.Printf("Removed server %q from registry\n", name)
+			return nil
+		},
+	}
+}
+
+func mcpEnableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "enable SERVER",
+		Short: "Enable an MCP server",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+			info, ok := servers[name].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("server %q not found in registry", name)
+			}
+			info["enabled"] = true
+			data, _ := json.MarshalIndent(reg, "", "  ")
+			os.WriteFile(mcpRegistryPath(), data, 0644)
+			fmt.Printf("Enabled %s\n", name)
+			return nil
+		},
+	}
+}
+
+func mcpDisableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "disable SERVER",
+		Short: "Disable an MCP server",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+			info, ok := servers[name].(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("server %q not found in registry", name)
+			}
+			info["enabled"] = false
+			data, _ := json.MarshalIndent(reg, "", "  ")
+			os.WriteFile(mcpRegistryPath(), data, 0644)
+			fmt.Printf("Disabled %s\n", name)
 			return nil
 		},
 	}

@@ -77,6 +77,12 @@ if [ -n "$EXISTING_SSH_CONFIGS" ] && [ "$FORCE_SSH" != "true" ]; then
   HARDEN_SSH_CRYPTO="false"
 fi
 
+# 0b. Auto-arm deadman before SSH changes
+if [ "$HARDEN_SSH_CRYPTO" = "true" ] && [ -x /usr/local/sbin/mainframe-deadman ]; then
+  echo "[harden] Auto-arming deadman timer (5 min) before SSH changes..."
+  /usr/local/sbin/mainframe-deadman arm 5 2>&1 | tail -2
+fi
+
 # 1. SSH hardening (sane defaults, idempotent)
 if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
   if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ] && grep -q "PermitRootLogin no" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null; then

@@ -2,16 +2,15 @@
 
 A secure, reproducible VPS bootstrap for developers.
 
-Take a fresh
-Ubuntu 24.04 VPS to a secure, configured dev box in one command.
+Take a fresh Ubuntu/Debian VPS to a secure, configured dev box in one command.
 
 ## What it does
 
-1. **Base provisioning** (`provision.sh --mode dev|prod`):
+1. **Base provisioning** (`mf provision --mode dev|prod`):
    - Detects OS (Debian/Ubuntu, Fedora, Arch, Alpine)
    - Installs packages from `packages.conf` (editable, with comments)
-   - Sets up Tailscale (private network, mandatory but configurable)
-   - Runs mainframe hardening (audit → hardened, vpn profile, dissolved into mainframe)
+   - Sets up Tailscale (private network, strongly recommended)
+   - Runs mainframe hardening (audit → SSH hardening, firewall, fail2ban, sysctl, unattended upgrades)
    - Sets up firewall (mode-specific: tailscale-only or public)
    - Sets up Bitwarden CLI for secrets (optional)
    - Creates `/code/` directory structure
@@ -21,11 +20,6 @@ Ubuntu 24.04 VPS to a secure, configured dev box in one command.
    - Clones project repos to `/code/<project>/<repo>`
    - Sets up project-specific infra
    - Starts dev services
-
-3. **Prod setup** (`provision.sh --mode prod`):
-   - Base hardening + Tailscale
-   - Runs anywaye substrate install.sh (k3s + Argo + services + observability)
-   - Sets up GlitchTip, observability, etc.
 
 ## Packages
 
@@ -44,7 +38,6 @@ Multi-OS via `lib/os/<family>.sh` modules:
 - **Alpine** (apk) — partial
 
 Adding a new OS is just adding a new file that implements the standard interface.
-See `docs/adding-os.md`.
 
 ## Security model
 
@@ -54,6 +47,9 @@ See `docs/adding-os.md`.
   Bitwarden CLI, firewall mode, extra ports
 - **Audit scoring:** mainframe audit runs before and after hardening, showing
   the security score improvement
+- **Recovery:** `mf recover` restores SSH access if hardening locks you out.
+  `mf ssh verify` checks SSH health. `mf ssh keygen --emergency` generates a
+  break-glass key.
 
 ## Configuration
 
@@ -83,16 +79,7 @@ export BW_EMAIL="your@email.com"  # optional
 mf provision --mode dev
 
 # 2. Set up your project
-bash projects/anywaye/setup.sh
-
-# 3. Start shared infra
-cd /code/anywaye/identity
-export KIT_STACK_DIR=/code/anywaye/kit
-export KIT_STACK_REF=e20d20664e6f1dc0bfb1023874367d2be43370d5
-export KIT_DEV_PROFILES=''
-export KIT_POSTGRES_DATABASES="identity,ship,ella,cafe,core,courier,billing,gateway,keyholder,kit,loom,notes,oauth-stub,platform,press,website,docs,anywaye-py,anywaye-rb,anywaye-ts,box,darkroom"
-export COURIER_TOKEN=dummy
-./bin/dev
+bash projects/<name>/setup.sh
 ```
 
 ## Quick start (prod VPS)
@@ -101,7 +88,7 @@ export COURIER_TOKEN=dummy
 export TAILSCALE_AUTHKEY="tskey-auth-..."
 export GH_TOKEN="ghp_..."
 mf provision --mode prod
-# Then follow the printed instructions for substrate install
+# Then follow the printed instructions
 ```
 
 ## Adding a new project
@@ -112,10 +99,12 @@ mf provision --mode prod
 
 ## Security
 
-- **Tailscale-only access** — no public ports, no SSH from internet
+- **Tailscale-only access** — no public ports by default, no SSH from internet
 - **mainframe hardened** — SSH keys only, fail2ban, unattended upgrades, firewall
 - **Secrets in Bitwarden** — never in git, never in plaintext
-- **No extra charges** — minimal VPS, no add-ons
+- **Deadman switch** — auto-rolls back SSH/firewall changes if not disarmed
+- **Recovery** — `mf recover` restores SSH access if hardening locks you out
+- **Break-glass key** — `mf ssh keygen --emergency` generates an emergency key
 
 ## Requirements
 

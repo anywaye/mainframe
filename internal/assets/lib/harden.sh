@@ -162,6 +162,29 @@ if dpkg -l inetutils-telnet 2>/dev/null | grep -q "^ii"; then
   apt purge -y -qq inetutils-telnet 2>/dev/null || true
 fi
 
+# 1c2. qemu-guest-agent hardening (disable guest-exec)
+if systemctl is-active --quiet qemu-guest-agent 2>/dev/null || dpkg -l qemu-guest-agent 2>/dev/null | grep -q "^ii"; then
+  echo "[harden] qemu-guest-agent detected - disabling guest-exec..."
+  # Disable the exec RPC via blacklist
+  mkdir -p /etc/qemu
+  if [ -f /etc/default/qemu-guest-agent ]; then
+    if grep -q "--blacklist" /etc/default/qemu-guest-agent 2>/dev/null; then
+      echo "[harden] Blacklist already configured"
+    else
+      echo 'DAEMON_ARGS="--blacklist=guest-exec,guest-exec-status"' >> /etc/default/qemu-guest-agent
+      systemctl restart qemu-guest-agent 2>/dev/null || true
+      echo "[harden] guest-exec blacklisted"
+    fi
+  else
+    # Create config if missing
+    echo 'DAEMON_ARGS="--blacklist=guest-exec,guest-exec-status"' > /etc/default/qemu-guest-agent
+    systemctl restart qemu-guest-agent 2>/dev/null || true
+    echo "[harden] guest-exec blacklisted (new config)"
+  fi
+  # Also stop and disable if not needed
+  echo "[harden] Consider removing qemu-guest-agent entirely if not needed: apt purge qemu-guest-agent"
+fi
+
 # 1d. DB port allowlisting (optional)
 if [ -n "${ALLOW_DB_FROM:-}" ]; then
   echo "[harden] Allowing DB ports from $ALLOW_DB_FROM..."

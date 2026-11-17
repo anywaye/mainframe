@@ -87,6 +87,7 @@ if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
     cp "$ASSETS_DIR/ssh/00-mainframe.conf" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null || echo "[harden] SSH config dir not found (non-Linux?)"
     groupadd -f sshusers 2>/dev/null || true
     # Add users with SSH authorized_keys to sshusers group
+    SSH_USERS_FOUND=0
     for home in /root /home/*; do
       if [ -f "$home/.ssh/authorized_keys" ]; then
         user=$(basename "$home")
@@ -95,9 +96,29 @@ if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
         if id "$user" >/dev/null 2>&1; then
           usermod -aG sshusers "$user" 2>/dev/null || true
           echo "[harden] Added $user to sshusers group"
+          SSH_USERS_FOUND=$((SSH_USERS_FOUND + 1))
         fi
       fi
     done
+    # Safety check: ensure at least one non-root user has SSH access before disabling root
+    NON_ROOT_SSH=0
+    for home in /home/*; do
+      if [ -f "$home/.ssh/authorized_keys" ]; then
+        user=$(basename "$home")
+        if id "$user" >/dev/null 2>&1 && groups "$user" 2>/dev/null | grep -q sshusers; then
+          NON_ROOT_SSH=$((NON_ROOT_SSH + 1))
+        fi
+      fi
+    done
+    if [ "$NON_ROOT_SSH" -eq 0 ]; then
+      echo "[harden] WARNING: No non-root user with SSH keys in sshusers group."
+      echo "[harden] PermitRootLogin no would lock out ALL SSH access."
+      echo "[harden] Aborting SSH hardening. Set up a non-root admin user with SSH keys first."
+      HARDEN_SSH_CRYPTO="false"
+      HARDEN_ERRORS=$((HARDEN_ERRORS + 1))
+    else
+      echo "[harden] Safety check passed: $NON_ROOT_SSH non-root user(s) have SSH access."
+    fi
     # Ensure the default sudo user is in sshusers
     for u in ubuntu admin debian; do
       if id "$u" >/dev/null 2>&1; then

@@ -1,18 +1,37 @@
 # Mainframe
 
-A secure, reproducible VPS bootstrap for developers.
+**Secure, reproducible VPS bootstrap for developers.**
 
-Take a fresh Ubuntu/Debian VPS to a secure, configured dev box in one command.
+Take a fresh Ubuntu/Debian VPS to a hardened, configured dev box in one command.
+
+```sh
+mf provision --mode dev
+```
+
+---
+
+## Table of Contents
+
+- [What it does](#what-it-does)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+- [Security](#security)
+- [Configuration](#configuration)
+- [SSH recovery](#ssh-recovery)
+- [OS support](#os-support)
+- [Requirements](#requirements)
+- [License](#license)
+
+---
 
 ## What it does
 
 1. **Base provisioning** (`mf provision --mode dev|prod`):
    - Detects OS (Debian/Ubuntu, Fedora, Arch, Alpine)
-   - Installs packages from `packages.conf` (editable, with comments)
+   - Installs packages from `packages.conf` (editable, one per line)
    - Sets up Tailscale (private network, strongly recommended)
-   - Runs mainframe hardening (audit → SSH hardening, firewall, fail2ban, sysctl, unattended upgrades)
-   - Sets up firewall (mode-specific: tailscale-only or public)
-   - Sets up Bitwarden CLI for secrets (optional)
+   - Runs mainframe hardening (audit → SSH, firewall, fail2ban, sysctl, unattended upgrades)
    - Creates `/code/` directory structure
    - No project-specific code or infra
 
@@ -21,35 +40,111 @@ Take a fresh Ubuntu/Debian VPS to a secure, configured dev box in one command.
    - Sets up project-specific infra
    - Starts dev services
 
-## Packages
+## Install
 
-Edit `packages.conf` to customize which packages are installed. One package per line,
-with comments. Version pins use colon: `go:1.26.6`.
+```sh
+# On your VPS (as root):
+curl -fsSL https://get.mainframe.sh | bash
+# Or clone and build:
+git clone https://github.com/anywaye/mainframe.git
+cd mainframe
+make build && make install
+```
 
-The OS module reads this file and installs only what's listed. If a package isn't
-available on your OS, it's skipped with a warning.
+Verify: `mf version`
 
-## OS support
+## Quick start
 
-Multi-OS via `lib/os/<family>.sh` modules:
-- **Debian/Ubuntu** (apt) — fully implemented
-- **Fedora/RHEL/CentOS** (dnf) — partial
-- **Arch** (pacman) — partial
-- **Alpine** (apk) — partial
+### Dev VPS
 
-Adding a new OS is just adding a new file that implements the standard interface.
+```sh
+# 1. Set environment variables
+export TAILSCALE_AUTHKEY="tskey-auth-..."   # from Tailscale admin
+export GH_TOKEN="ghp_..."                  # GitHub PAT (repo + packages:write)
+export BW_EMAIL="your@email.com"           # optional, for Bitwarden secrets
 
-## Security model
+# 2. Provision
+mf provision --mode dev
 
-- **Mandatory:** SSH key-only auth, firewall (default deny), OS updates, etckeeper,
-  deadman switch, no secrets in git
-- **Configurable:** Tailscale (strongly recommended), mainframe hardening level,
-  Bitwarden CLI, firewall mode, extra ports
-- **Audit scoring:** mainframe audit runs before and after hardening, showing
-  the security score improvement
-- **Recovery:** `mf recover` restores SSH access if hardening locks you out.
-  `mf ssh verify` checks SSH health. `mf ssh keygen --emergency` generates a
-  break-glass key.
+# 3. Set up your project (optional)
+bash projects/<name>/setup.sh
+```
+
+### Prod VPS
+
+```sh
+export TAILSCALE_AUTHKEY="tskey-auth-..."
+export GH_TOKEN="ghp_..."
+mf provision --mode prod
+# Follow the printed instructions for substrate install
+```
+
+## Commands
+
+### Provisioning
+
+| Command | Description |
+|---|---|
+| `mf provision --mode dev` | Provision a dev VPS |
+| `mf provision --mode prod` | Provision a prod VPS |
+| `mf provision --dry-run` | Preview without executing |
+
+### Security & SSH
+
+| Command | Description |
+|---|---|
+| `mf harden` | Apply security hardening (SSH, firewall, fail2ban, sysctl) |
+| `mf audit` | Run security audit (before/after scoring) |
+| `mf recover` | **Emergency recovery** — restores SSH if hardening locks you out |
+| `mf ssh verify` | Health check (daemon, port, keys, permissions, firewall) |
+| `mf ssh keygen --emergency` | Generate a break-glass SSH key pair |
+| `mf ssh recover` | Emergency recovery with break-glass key support |
+
+### Utilities
+
+| Command | Description |
+|---|---|
+| `mf status` | Show system status |
+| `mf doctor` | Diagnose common issues |
+| `mf version` | Print version |
+| `mf update` | Check for updates |
+
+## Security
+
+mainframe applies a security baseline automatically:
+
+- **SSH**: Key-only auth, no root login (after hardening), fail2ban
+- **Firewall**: Default deny incoming, allow SSH + configured ports
+- **Sysctl**: BBR congestion control, redirect/source-route hardening
+- **Unattended upgrades**: Automatic security patches
+- **Deadman switch**: Auto-rolls back SSH/firewall changes if not disarmed within 5 minutes
+- **etckeeper**: Tracks all config changes in git
+
+### Recovery (if you get locked out)
+
+```sh
+# 1. VNC into the VPS via Contabo panel
+# 2. Log in as root
+# 3. Run:
+mf recover
+
+# 4. SSH should now work with password
+ssh -o PreferredAuthentications=password root@<IP>
+
+# 5. Fix the underlying issue, then re-harden:
+mf harden
+```
+
+### Break-glass key (recommended)
+
+Generate an emergency key **before** you need it:
+
+```sh
+mf ssh keygen --emergency
+# Save the private key to Bitwarden immediately!
+```
+
+This key is added to `authorized_keys` with a `# BREAK-GLASS - DO NOT REMOVE` comment and survives hardening.
 
 ## Configuration
 
@@ -69,42 +164,23 @@ All config via environment variables or `.env` file (from `.env.template`):
 | `PACKAGES_FILE` | `./packages.conf` | Path to packages config |
 | `PROJECT` | (empty) | Project to set up after provisioning |
 
-## Quick start (dev VPS)
+## Packages
 
-```sh
-# 1. Provision the VPS (on the VPS, as root)
-export TAILSCALE_AUTHKEY="tskey-auth-..."
-export GH_TOKEN="ghp_..."
-export BW_EMAIL="your@email.com"  # optional
-mf provision --mode dev
+Edit `packages.conf` to customize which packages are installed. One package per line,
+with comments. Version pins use colon: `go:1.26.6`.
 
-# 2. Set up your project
-bash projects/<name>/setup.sh
-```
+The OS module reads this file and installs only what's listed. If a package isn't
+available on your OS, it's skipped with a warning.
 
-## Quick start (prod VPS)
+## OS support
 
-```sh
-export TAILSCALE_AUTHKEY="tskey-auth-..."
-export GH_TOKEN="ghp_..."
-mf provision --mode prod
-# Then follow the printed instructions
-```
+Multi-OS via `lib/os/<family>.sh` modules:
+- **Debian/Ubuntu** (apt) — fully implemented
+- **Fedora/RHEL/CentOS** (dnf) — partial
+- **Arch** (pacman) — partial
+- **Alpine** (apk) — partial
 
-## Adding a new project
-
-1. Create `projects/<name>/` directory
-2. Copy `projects/example/setup.sh` and customize
-3. Run `bash projects/<name>/setup.sh`
-
-## Security
-
-- **Tailscale-only access** — no public ports by default, no SSH from internet
-- **mainframe hardened** — SSH keys only, fail2ban, unattended upgrades, firewall
-- **Secrets in Bitwarden** — never in git, never in plaintext
-- **Deadman switch** — auto-rolls back SSH/firewall changes if not disarmed
-- **Recovery** — `mf recover` restores SSH access if hardening locks you out
-- **Break-glass key** — `mf ssh keygen --emergency` generates an emergency key
+Adding a new OS is just adding a new file that implements the standard interface.
 
 ## Requirements
 

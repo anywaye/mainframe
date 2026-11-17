@@ -2,10 +2,15 @@
 
 **Secure, reproducible VPS bootstrap for developers.**
 
-Take a fresh Ubuntu/Debian VPS to a hardened, configured dev box in one command.
+Take a fresh Linux VPS to a hardened, configured box in one command.
+Supports both **dev** and **prod** modes.
 
 ```sh
+# Dev box (interactive, tools, relaxed firewall)
 mf provision --mode dev
+
+# Production server (hardened, tailscale-only, k3s-ready)
+mf provision --mode prod
 ```
 
 ---
@@ -184,7 +189,7 @@ Adding a new OS is just adding a new file that implements the standard interface
 
 ## Requirements
 
-- Fresh Ubuntu 24.04 VPS (Contabo, Hetzner, DigitalOcean, etc.)
+- Fresh Linux VPS (Ubuntu 24.04 recommended; Debian, Fedora, Arch, Alpine also supported)
 - Root SSH access
 - Tailscale account (free tier: 100 devices)
 - GitHub PAT (repo + packages:write scopes)

@@ -131,6 +131,9 @@ mf audit           # Security audit score
 | `mf ssh verify` | Health check (daemon, port, keys, permissions, firewall) |
 | `mf ssh keygen --emergency` | Generate a break-glass SSH key pair |
 | `mf ssh recover` | Emergency recovery with break-glass key support |
+| `mf deadman arm 5` | Arm deadman timer (5 min) before risky changes |
+| `mf deadman disarm` | Disarm (keep changes) |
+| `mf deadman status` | Show timer status |
 
 ### Utilities
 

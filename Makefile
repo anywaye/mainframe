@@ -2,7 +2,7 @@
 
 BINARY := mf
 VERSION := $(shell cat VERSION)
-LDFLAGS := -ldflags "-X main.version=$(VERSION)"
+LDFLAGS := -ldflags "-X github.com/anywaye/mainframe/internal/cmd.version=$(VERSION)"
 
 .PHONY: build test clean install
 

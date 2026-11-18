@@ -145,7 +145,7 @@ var sshVerifyCmd = &cobra.Command{
 
 		// Check iptables
 		fmt.Print("[6/6] Port 22 in firewall... ")
-		out, _ = exec.Command("bash", "-c", "(iptables -L INPUT -n 2>/dev/null | grep -q 'dpt:22\\|dport 22') || (ufw status 2>/dev/null | grep -q '22/tcp.*ALLOW') && echo allowed || echo blocked").Output()
+	out, _ = exec.Command("bash", "-c", "(iptables -L INPUT -n 2>/dev/null | grep -q 'dpt:22\\|dport 22') || (ufw status 2>/dev/null | grep -q '22/tcp.*ALLOW') || (iptables -L INPUT -n 2>/dev/null | head -1 | grep -q 'policy ACCEPT') && echo allowed || echo blocked").Output()
 		result := strings.TrimSpace(string(out))
 		if result == "allowed" {
 			fmt.Println("allowed")

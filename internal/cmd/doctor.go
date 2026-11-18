@@ -82,7 +82,7 @@ var doctorCmd = &cobra.Command{
 
 		// --- Tools & dirs (dev boxes only; prod/k3s nodes don't need these) ---
 		if _, err := os.Stat("/code"); err == nil {
-			for _, t := range []string{"docker", "go", "node", "gh", "helm", "psql"} {
+			for _, t := range []string{"docker", "go", "node", "gh", "helm"} {
 				_, err := exec.LookPath(t)
 				check(t+" installed", err == nil, "mf provision --mode dev")
 			}

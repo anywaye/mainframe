@@ -140,9 +140,27 @@ mf audit           # Security audit score
 | Command | Description |
 |---|---|
 | `mf status` | Show system status |
-| `mf doctor` | Diagnose common issues |
+| `mf doctor` | Diagnose common issues (read-only) |
+| `mf doctor --fix` | Diagnose and repair detected issues (idempotent) |
+| `mf doctor --fix --dry-run` | Show what `--fix` would change without applying |
 | `mf version` | Print version |
 | `mf update` | Check for updates |
+
+## Doctor (`mf doctor`)
+
+`mf doctor` checks the VPS for common issues and reports them. By default it is
+read-only and never changes anything.
+
+- `mf doctor` — diagnose only.
+- `mf doctor --fix` — diagnose and apply minimal, idempotent repairs.
+- `mf doctor --fix --dry-run` — show what `--fix` would change without applying.
+
+Checks include SSH keys, Tailscale, firewall, installed tools, directories,
+root password, Go version, and network/flannel settings (rp_filter, FORWARD
+policy, Flannel 8472/udp). On prod/k3s nodes the dev-tool checks are skipped
+automatically.
+
+Repairs are idempotent: re-running `--fix` on an already-healthy box is a no-op.
 
 ## Security
 
@@ -150,7 +168,8 @@ mf audit           # Security audit score
 
 - **SSH**: Key-only auth, no root login (after hardening), fail2ban with auto-ban
 - **Firewall**: Default deny incoming, allow SSH plus configured ports
-- **Sysctl**: BBR congestion control, redirect/source-route hardening
+- **Sysctl**: BBR congestion control, redirect/source-route hardening, rp_filter tuned for multi-homed/k3s hosts
+- **Firewall**: default deny incoming; FORWARD policy ACCEPT (k3s pod-to-pod); Flannel VXLAN (8472/udp) allowed between cluster nodes
 - **Unattended upgrades**: Automatic security patches
 - **Deadman switch**: Auto-rolls back SSH/firewall changes if not disarmed within 5 minutes
 - **etckeeper**: Tracks all config changes in git

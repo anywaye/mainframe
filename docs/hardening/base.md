@@ -20,7 +20,7 @@
 3. **etckeeper** (section below) before the first config change.
 4. **deadman:** install the helper once, then use it around every risky change:
    ```bash
-   ssh host 'sudo install -m 755 /dev/stdin /usr/local/sbin/mainframe-deadman' < scripts/deadman.sh
+   ssh host 'sudo install -m 755 /dev/stdin /usr/local/sbin/mf deadman' < scripts/deadman.sh
    ```
 
 ## Non-interactive apt
@@ -47,7 +47,7 @@ If the upgrade installed a new kernel (`/var/run/reboot-required` exists), plan 
 
 fail2ban starts the moment it is installed on Debian 13 and Ubuntu 24.04, with the stock sshd jail and without the admin's IP. On start it re-reads recent journal lines, so your earlier test logins ban the user at once. Mask it first and write its jail (`sudo` before each command when not root):
 ```bash
-ADMIN_IP=$(mainframe-deadman client-ip) && [[ $ADMIN_IP =~ ^[0-9A-Fa-f:.]+$ ]] || { echo "no admin IP: stop"; exit 1; }
+ADMIN_IP=$(mf deadman client-ip) && [[ $ADMIN_IP =~ ^[0-9A-Fa-f:.]+$ ]] || { echo "no admin IP: stop"; exit 1; }
 systemctl is-active --quiet fail2ban || systemctl mask fail2ban
 install -d -m 755 /etc/fail2ban/jail.d
 # write assets/fail2ban/mainframe.local to /etc/fail2ban/jail.d/ with <admin-ip> = $ADMIN_IP
@@ -151,7 +151,7 @@ Never add a remote to `/etc/.git` or push it anywhere: it contains `shadow`, hos
 ## Reboot drill (phase 11)
 
 With the user's OK, and with the provider console at hand, prove that SSH, the firewall and the app survive a reboot:
-1. `mainframe-deadman status` must say `not armed`. Don't arm for the drill: a reboot while armed rolls back at boot by design, and that restore re-applies the SSH and firewall state, which would hide exactly what the drill looks for. `disarm` would then report `ROLLED BACK`.
+1. `mf deadman status` must say `not armed`. Don't arm for the drill: a reboot while armed rolls back at boot by design, and that restore re-applies the SSH and firewall state, which would hide exactly what the drill looks for. `disarm` would then report `ROLLED BACK`.
 2. `systemctl reboot`. The multiplexed master dies with it.
 3. After a minute, from a new connection: `ssh -o ControlPath=none -o BatchMode=yes -p <port> <admin>@<host> 'sudo -n ufw status | head -n 1; systemctl --failed --no-legend'`. Under password sudo without the temporary grant, expect `a password is required` and have the user run the checks. Then check the app (`docker ps`, `curl -sI https://<domain>`).
 

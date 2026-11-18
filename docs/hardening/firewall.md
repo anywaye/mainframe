@@ -19,7 +19,7 @@ ss -H -tulpn | awk '{print $1, $5, $7}'
 ```
 Then, inside a deadman window:
 ```bash
-mainframe-deadman arm 5
+mf deadman arm 5
 # fail2ban installed? The admin's IP must already be in its ignoreip (see fail2ban below)
 ufw default deny incoming
 ufw default allow outgoing
@@ -73,7 +73,7 @@ The dead-man switch can't roll back a provider firewall, so change it additively
 ## The admin's IP
 
 ```bash
-ADMIN_IP=$(sudo mainframe-deadman client-ip)   # without sudo when root
+ADMIN_IP=$(sudo mf deadman client-ip)   # without sudo when root
 [[ $ADMIN_IP =~ ^[0-9A-Fa-f:.]+$ ]] || { echo "no admin IP: stop"; exit 1; }
 ```
 `${SSH_CLIENT%% *}` is empty under sudo (`env_reset`), on every supported distro. `client-ip` finds the address of the calling SSH client even through sudo, and exits 1 when there is none. Stop if the result is empty or not an IP, before writing any file.

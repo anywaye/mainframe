@@ -65,7 +65,7 @@ AllowedIPs = 10.8.0.2/32
 
 This removes SSH from the internet entirely. Do it only after the VPN path has been proven, and always with the deadman. The deadman restores the firewall rules below, but it doesn't snapshot WireGuard, Tailscale or netplan config, so never point the server's own default route into a tunnel (`AllowedIPs = 0.0.0.0/0` on the server, `tailscale up --exit-node=…`):
 1. From the user's machine: `ssh <admin>@<vpn-ip>` works (`100.x.y.z` on Tailscale, `10.8.0.1` on WireGuard).
-2. `mainframe-deadman arm 10`
+2. `mf deadman arm 10`
 3. Delete both public SSH rules: `ufw delete limit <port>/tcp` and `ufw delete allow from <admin-ip> to any port <port> proto tcp` (plus any other admin or agent-session allow for that port; check `ufw status`). Keep `ufw allow in on tailscale0` or `ufw allow in on wg0 to any port <port> proto tcp`.
 4. The public IP no longer answers on the SSH port (`external-check.sh`, or `nc -z -w 5 <public-ip> <port>` fails). A leftover admin rule would still let the admin in from outside.
 5. Test and disarm over the VPN (ssh.md "Test and disarm", with `<admin>@<vpn-ip>`; `ControlPath=none` so a multiplexed master over the public IP can't fake it). Write in SERVER.md that **break-glass access is the provider console only** if the VPN breaks. Also mirror the rule in the provider firewall.

@@ -9,10 +9,10 @@ An agent without the skill hardens a server with no dead-man switch. The sure si
 0. **Tailscale SSH lockout?** If Tailscale SSH is enabled (`tailscale up --ssh`), the Tailscale daemon intercepts port 22. If the daemon crashes (e.g., during a heavy build), SSH becomes unreachable via the Tailscale IP AND the public IP (firewall blocks it). Recovery: provider console or rescue mode. **Prevention: do not enable Tailscale SSH. Use OpenSSH directly.** mainframe's tailscale.sh does not use `--ssh`.
 
 0b. **Banned by fail2ban?** If SSH times out or is refused right after test logins, your IP is probably banned (the deadman doesn't touch fail2ban). From another IP (phone hotspot) or the console: `fail2ban-client banned` (`fail2ban-client status sshd` on 0.11, Ubuntu 22.04), then `fail2ban-client set sshd unbanip <ip>` and `fail2ban-client set recidive unbanip <ip>`. Then put it into `ignoreip` in `/etc/fail2ban/jail.d/mainframe.local` and `systemctl reload fail2ban`, so the next test logins don't ban it again (firewall.md).
-1. **Wait for the deadman.** If it was armed, it restores the SSH, firewall, sudoers and PAM config, the ssh/firewall units' enabled state, and removes files created during the window when the timer fires (default 5 min). Then try again. Check later with `journalctl -t mainframe-deadman`.
+1. **Wait for the deadman.** If it was armed, it restores the SSH, firewall, sudoers and PAM config, the ssh/firewall units' enabled state, and removes files created during the window when the timer fires (default 5 min). Then try again. Check later with `journalctl -t mf deadman`.
 2. **Provider console** (VNC/serial): log in with a console password, or with root's password if one was set. Then:
    ```bash
-   mainframe-deadman restore          # if the snapshot exists
+   mf deadman restore          # if the snapshot exists
    # or by hand:
    ufw disable
    mv /etc/ssh/sshd_config.d/00-mainframe.conf /root/   # also 01-mainframe-crypto.conf

@@ -18,8 +18,8 @@
 The most common way to brick a VPS is to disable root or password login before the replacement path has been proven. Follow this order exactly:
 
 1. As root (or the provider's default user): create the admin user and install the key.
-2. `mainframe-deadman arm 5`, write the sudo policy (below), then test and disarm (next section). This proves the admin login and sudo before anything depends on them.
-3. `mainframe-deadman arm 5`
+2. `mf deadman arm 5`, write the sudo policy (below), then test and disarm (next section). This proves the admin login and sudo before anything depends on them.
+3. `mf deadman arm 5`
 4. Write `/etc/ssh/sshd_config.d/00-mainframe.conf`, plus `01-mainframe-crypto.conf` for `hardened` and above (the default level, see "Hardened crypto"). Run `sshd -t`, then `systemctl reload ssh`. Both files go into one deadman window and one test.
 5. Test and disarm again. Also check that `ssh root@host` and password auth are refused.
 6. `etckeeper commit "mainframe: ssh hardening"`. If disarm exits non-zero and prints `ROLLED BACK` or `ROLLBACK IN PROGRESS`, the timer already fired and the change is gone: don't report it as applied, and don't commit.
@@ -31,9 +31,9 @@ If a test fails, don't improvise fixes through the old session while the timer i
 The test runs from a **new, unmultiplexed** connection. Without `-o ControlPath=none`, ssh reuses the multiplexed master and proves nothing. Which command to use depends on the sudo policy:
 
 - **NOPASSWD, or password sudo with the temporary grant** (below). One command proves the login, port, firewall and sudo, and disarms:
-  `ssh -o ControlPath=none -o BatchMode=yes -p <port> <admin>@<host> 'sudo -n mainframe-deadman disarm'`
+  `ssh -o ControlPath=none -o BatchMode=yes -p <port> <admin>@<host> 'sudo -n mf deadman disarm'`
   If it fails at any point, the switch stays armed and the timer rolls back.
-- **Password sudo without the grant.** `sudo -n` always fails here, so it can't be the disarm path. Run `ssh -o ControlPath=none -o BatchMode=yes -p <port> <admin>@<host> 'sudo -n -v'`. It must fail with `a password is required`, which proves the login and that sudoers lets the admin in. `Sorry, user … may not run sudo` means the policy is broken: let the change roll back. Don't use `sudo -n true` for this: it prints `a password is required` for non-sudoers too. Also check in the root session that `passwd -S <admin>` shows `P` (a password is set); with `L` the admin can never pass sudo. When both pass, run `mainframe-deadman disarm` from the existing root session. Once that session is gone, the user has to run `sudo mainframe-deadman disarm` themselves.
+- **Password sudo without the grant.** `sudo -n` always fails here, so it can't be the disarm path. Run `ssh -o ControlPath=none -o BatchMode=yes -p <port> <admin>@<host> 'sudo -n -v'`. It must fail with `a password is required`, which proves the login and that sudoers lets the admin in. `Sorry, user … may not run sudo` means the policy is broken: let the change roll back. Don't use `sudo -n true` for this: it prints `a password is required` for non-sudoers too. Also check in the root session that `passwd -S <admin>` shows `P` (a password is set); with `L` the admin can never pass sudo. When both pass, run `mf deadman disarm` from the existing root session. Once that session is gone, the user has to run `sudo mf deadman disarm` themselves.
 
 ## Admin user and sudo policy
 
@@ -133,7 +133,7 @@ EOF
 # fail2ban's ignoreip. Exempt the admin's IP, but only where sshd knows the option: an unknown
 # keyword stops sshd from starting. $SSH_CLIENT is empty under sudo; client-ip isn't.
 # An agent-session IP gets a `# agent session <date>` comment line above the entry.
-ADMIN_IP=$(mainframe-deadman client-ip) && [[ $ADMIN_IP =~ ^[0-9A-Fa-f:.]+$ ]] || { echo "no admin IP: stop"; exit 1; }
+ADMIN_IP=$(mf deadman client-ip) && [[ $ADMIN_IP =~ ^[0-9A-Fa-f:.]+$ ]] || { echo "no admin IP: stop"; exit 1; }
 sshd -t -o "PerSourcePenaltyExemptList=$ADMIN_IP" 2>/dev/null &&
   echo "PerSourcePenaltyExemptList $ADMIN_IP" >> /etc/ssh/sshd_config.d/01-mainframe-crypto.conf
 sshd -t
@@ -149,7 +149,7 @@ sshd -t
 
 This is noise reduction, not security; offer it only if the user wants quieter logs. First check the **provider firewall** (Hetzner, DigitalOcean, AWS security groups and so on, see firewall.md): if it allows only 22, open the new port there first, or every attempt just rolls back. Then, all in one deadman window:
 
-1. `mainframe-deadman arm 5`
+1. `mf deadman arm 5`
 2. ufw for the new port, admin rule first: `ufw prepend allow from <admin-ip> to any port <new> proto tcp comment 'admin'`, then `ufw limit <new>/tcp comment 'ssh'`.
 3. Add `Port <new>` to `00-mainframe.conf`. `Port` lines add up, so comment out any active `Port` in the main file: `sed -i -E 's/^[[:space:]]*Port[[:space:]]/#&/' /etc/ssh/sshd_config`. Check with `sshd -t && [ "$(sshd -T | grep -c '^port ')" = 1 ]`.
 4. fail2ban: `sed -i -E 's/^port = .*/port = <new>/' /etc/fail2ban/jail.d/mainframe.local` (sshd and recidive), then `systemctl reload fail2ban` (skip the reload while it is still masked: phase 5 starts it with the new port). Otherwise fail2ban keeps counting failures but bans them on the old port, which protects nothing. The deadman doesn't snapshot fail2ban: after a rollback, set the old port back by hand.

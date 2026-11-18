@@ -57,24 +57,24 @@ Tell them to run the stages from their own SSH session, not from the provider's 
 This is the step that replaces your new-connection test. In `2-access.sh`, around every SSH, firewall, sudo or PAM change:
 
 ```bash
-mainframe-deadman arm 10
+mf deadman arm 10
 # ... the change, validated ...
 cat <<MSG
 
 Keep this window open. In a NEW terminal on your computer, run:
-  ssh -o ControlPath=none -p ${PORT} ${ADMIN}@${HOST} 'sudo -n mainframe-deadman disarm'
+  ssh -o ControlPath=none -p ${PORT} ${ADMIN}@${HOST} 'sudo -n mf deadman disarm'
 If it prints "disarmed: changes kept", you're done with this step: come back and press Enter.
 If the login fails, do nothing. In 10 minutes the server undoes this step by itself.
 MSG
 read -r -t 540 -p "Press Enter after the new login disarmed it: " || true
-st=$(mainframe-deadman status)
+st=$(mf deadman status)
 case "$st" in
   ARMED*) echo "Still armed: the new login didn't disarm it. Stopping here; the rollback will run. Paste this output back."; exit 1 ;;
   *"ROLLED BACK since"*) echo "The server rolled this step back. Stopping here. Paste this output back."; exit 1 ;;
 esac
 ```
 
-The user's second terminal is the new connection: it can't reuse the session the script runs in. Under password sudo the test command is `ssh -t -o ControlPath=none -p ${PORT} ${ADMIN}@${HOST} 'sudo mainframe-deadman disarm'`, and the user types their password there. Never let the script disarm itself: a disarm that didn't come from a new login proves nothing.
+The user's second terminal is the new connection: it can't reuse the session the script runs in. Under password sudo the test command is `ssh -t -o ControlPath=none -p ${PORT} ${ADMIN}@${HOST} 'sudo mf deadman disarm'`, and the user types their password there. Never let the script disarm itself: a disarm that didn't come from a new login proves nothing.
 
 ## What script mode can't do
 

@@ -80,16 +80,18 @@ var doctorCmd = &cobra.Command{
 		ufwActive := strings.Contains(string(ufwOut), "active")
 		check("Firewall active", ufwActive, "mf provision --mode dev")
 
-		// --- Tools ---
-		for _, t := range []string{"docker", "go", "node", "gh", "helm", "psql"} {
-			_, err := exec.LookPath(t)
-			check(t+" installed", err == nil, "mf provision --mode dev")
-		}
-
-		// --- Directories ---
-		for _, dir := range []string{"/code", "/data/workspace"} {
-			_, err := os.Stat(dir)
-			check(dir+" exists", err == nil, "mf provision --mode dev")
+		// --- Tools & dirs (dev boxes only; prod/k3s nodes don't need these) ---
+		if _, err := os.Stat("/code"); err == nil {
+			for _, t := range []string{"docker", "go", "node", "gh", "helm", "psql"} {
+				_, err := exec.LookPath(t)
+				check(t+" installed", err == nil, "mf provision --mode dev")
+			}
+			for _, dir := range []string{"/code", "/data/workspace"} {
+				_, err := os.Stat(dir)
+				check(dir+" exists", err == nil, "mf provision --mode dev")
+			}
+		} else {
+			fmt.Println("  [SKIP] dev tool/dir checks (prod node)")
 		}
 
 		// --- Root password ---

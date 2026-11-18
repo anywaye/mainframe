@@ -38,6 +38,19 @@ if [ -n "$EXISTING_RULES" ] && [ "$FORCE_FIREWALL" != "true" ]; then
   echo "[firewall] Skipping firewall reset to preserve existing rules."
   echo "[firewall] To override: set FORCE_FIREWALL=true or use --force-firewall"
   echo "[firewall] Add custom rules to firewall.conf and re-run with FIREWALL_MODE=custom"
+  # Even when skipping the reset, ensure k3s/flannel prerequisites are in place:
+  # ufw defaults FORWARD to DROP, which breaks pod-to-pod traffic across nodes.
+  sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw 2>/dev/null || true
+  # Flannel VXLAN (k3s) needs 8472/udp between cluster nodes.
+  if ! ufw status 2>/dev/null | grep -q "8472/udp"; then
+    ufw allow 8472/udp comment 'Flannel VXLAN (k3s)' >/dev/null 2>&1 || true
+  fi
+  # rp_filter=1 drops decapsulated VXLAN packets; loosen for multi-homed/k3s hosts.
+  if [ -f /etc/sysctl.d/99-mainframe.conf ]; then
+    sed -i 's/^net.ipv4.conf.all.rp_filter = .*/net.ipv4.conf.all.rp_filter = 2/' /etc/sysctl.d/99-mainframe.conf 2>/dev/null || true
+    sed -i 's/^net.ipv4.conf.default.rp_filter = .*/net.ipv4.conf.default.rp_filter = 2/' /etc/sysctl.d/99-mainframe.conf 2>/dev/null || true
+    sysctl -w net.ipv4.conf.all.rp_filter=2 >/dev/null 2>&1 || true
+  fi
   # Save existing rules to a reference file
   if [ -n "${PROJECT_DIR:-}" ]; then
     ufw status numbered > "$PROJECT_DIR/firewall.existing" 2>/dev/null || true
@@ -77,7 +90,8 @@ case "$FIREWALL_MODE" in
     ufw allow 443/tcp comment 'HTTPS'
     ufw allow 22/tcp comment 'SSH (break-glass)'
     ufw allow 41641/udp comment 'Tailscale'
-    echo "[firewall] Mode: public (80/443 + SSH + Tailscale)"
+    ufw allow 8472/udp comment 'Flannel VXLAN (k3s)'
+    echo "[firewall] Mode: public (80/443 + SSH + Tailscale + flannel)"
     ;;
   custom)
     CONF="${SCRIPT_DIR:-.}/firewall.conf"
@@ -129,6 +143,12 @@ if [ "$FIREWALL_MODE" = "tailscale-only" ]; then
   fi
   echo "[firewall] Tailscale IP: $TS_IP — SSH will be allowed via Tailscale"
 fi
+
+# Persist FORWARD policy=ACCEPT (ufw defaults to DROP, breaks pod-to-pod traffic).
+sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw 2>/dev/null || true
+# Apply rp_filter=0/2 for multi-homed (k3s/flannel) hosts.
+sysctl -w net.ipv4.conf.all.rp_filter=2 >/dev/null 2>&1 || true
+sysctl -w net.ipv4.conf.default.rp_filter=2 >/dev/null 2>&1 || true
 
 ufw --force enable
 echo "[firewall] Firewall enabled"

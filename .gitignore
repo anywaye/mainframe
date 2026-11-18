@@ -13,3 +13,4 @@ Thumbs.db
 *.tar.gz
 *.tgz
 mf-linux-*
+mf-darwin-*

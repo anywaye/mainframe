@@ -111,7 +111,7 @@ if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
     for home in /home/*; do
       if [ -f "$home/.ssh/authorized_keys" ]; then
         user=$(basename "$home")
-        if id "$user" >/dev/null 2>&1 && groups "$user" 2>/dev/null | grep -q sshusers; then
+        if id "$user" >/dev/null 2>&1 && grep sshusers /etc/group | grep -q "$user"; then
           NON_ROOT_SSH=$((NON_ROOT_SSH + 1))
         fi
       fi

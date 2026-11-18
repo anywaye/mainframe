@@ -47,11 +47,15 @@ if [ -n "$EXISTING_RULES" ] && [ "$FORCE_FIREWALL" != "true" ]; then
 fi
 
 if [ -z "$FIREWALL_MODE" ]; then
-  # Default to "public" (SSH on port 22) for safety.
-  # tailscale-only mode blocks all SSH if Tailscale crashes.
-  # Use tailscale-only only if you have a working Tailscale connection
-  # AND a console password for recovery.
-  FIREWALL_MODE="public"
+  if [ "$MODE" = "prod" ]; then
+    # Prod: tailscale-only (no public SSH). VNC is the fallback.
+    # Requires working Tailscale + console password for recovery.
+    FIREWALL_MODE="tailscale-only"
+  else
+    # Dev: public (SSH on port 22) for convenience.
+    # Switch to tailscale-only with: FIREWALL_MODE=tailscale-only
+    FIREWALL_MODE="public"
+  fi
 fi
 
 if ! command -v ufw &>/dev/null; then

@@ -90,6 +90,10 @@ var doctorCmd = &cobra.Command{
 				_, err := os.Stat(dir)
 				check(dir+" exists", err == nil, "mf provision --mode dev")
 			}
+			// --- Go version ---
+			goOut, _ := exec.Command("go", "version").Output()
+			goOK := strings.Contains(string(goOut), "go1.2")
+			check("Go 1.26+ installed", goOK, "install Go 1.26.6")
 		} else {
 			fmt.Println("  [SKIP] dev tool/dir checks (prod node)")
 		}
@@ -98,11 +102,6 @@ var doctorCmd = &cobra.Command{
 		rootpw, _ := exec.Command("sudo", "bash", "-c", "awk -F: '$1==\"root\"{print substr($2,1,1)}' /etc/shadow").Output()
 		hasRootPw := strings.TrimSpace(string(rootpw)) == "$"
 		check("Root password set (console access)", hasRootPw, "passwd root")
-
-		// --- Go version ---
-		goOut, _ := exec.Command("go", "version").Output()
-		goOK := strings.Contains(string(goOut), "go1.2")
-		check("Go 1.26+ installed", goOK, "install Go 1.26.6")
 
 		// --- Network / flannel (k3s multi-node) ---
 		// rp_filter: strict (1) drops decapsulated VXLAN packets on multi-homed hosts.

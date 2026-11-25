@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/anywaye/mainframe/internal/assets"
 	"github.com/spf13/cobra"
 )
 
@@ -39,8 +41,30 @@ var applyCmd = &cobra.Command{
 			return fmt.Errorf("no mainframe.yml found in %s. Run 'mf init <url>' or 'cd' to your config repo", configDir)
 		}
 
-		// Find framework lib directory
-		frameworkLib := findFrameworkLib()
+		// Extract embedded framework lib to temp dir
+		tmpDir, err := os.MkdirTemp("", "mainframe-lib-*")
+		if err != nil {
+			return fmt.Errorf("failed to create temp dir: %w", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		// Extract all embedded lib files
+		assets.Walk("lib", func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			data, err := assets.ReadFile(path)
+			if err != nil {
+				return nil
+			}
+			relPath := strings.TrimPrefix(path, "lib/")
+			destPath := filepath.Join(tmpDir, relPath)
+			os.MkdirAll(filepath.Dir(destPath), 0755)
+			os.WriteFile(destPath, data, 0755)
+			return nil
+		})
+
+		frameworkLib := tmpDir
 
 		origDir, _ := os.Getwd()
 		os.Chdir(configDir)
@@ -63,8 +87,8 @@ var applyCmd = &cobra.Command{
 				fmt.Println("  [dry-run] Would install packages from packages.conf")
 			} else {
 				runShellStep("install packages", fmt.Sprintf(`
-					source %s/lib/detect.sh 2>/dev/null
-					source %s/lib/os/%s.sh 2>/dev/null
+					source %s/detect.sh 2>/dev/null
+					source %s/os/%s.sh 2>/dev/null
 					if type install_packages &>/dev/null; then install_packages packages.conf; else echo "  OS module not available"; fi
 				`, frameworkLib, frameworkLib, osFamily))
 			}

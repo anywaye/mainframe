@@ -48,12 +48,18 @@ install_packages() {
     local version="${line#*:}"
     [ "$version" = "$line" ] && version=""
 
-    if brew list "$pkg" &>/dev/null 2>&1; then
-      echo "[darwin] $pkg already installed. Skipping."
-    else
-      echo "[darwin] Installing $pkg..."
-      brew install "$pkg" 2>&1 | tail -1 || echo "[darwin] Warning: failed to install $pkg"
+    # Check if already available as a command
+    if command -v "$pkg" &>/dev/null 2>&1; then
+      echo "[darwin] $pkg already available. Skipping."
+      return 0
     fi
+    # Check if installed via brew
+    if brew list "$pkg" &>/dev/null 2>&1; then
+      echo "[darwin] $pkg already installed via brew. Skipping."
+      return 0
+    fi
+    echo "[darwin] Installing $pkg..."
+    brew install "$pkg" 2>&1 | tail -2 || echo "[darwin] Warning: failed to install $pkg (may need manual install)"
   done < "$conf"
 
   echo "[darwin] Package installation complete."

@@ -22,7 +22,23 @@ var newCmd = &cobra.Command{
 			return fmt.Errorf("directory %s already exists", dir)
 		}
 
-		dirs := []string{dir, dir + "/projects/example", dir + "/skills/common", dir + "/mcp", dir + "/dotfiles"}
+		dirs := []string{
+			dir,
+			dir + "/shell/zsh",
+			dir + "/shell/bash",
+			dir + "/git",
+			dir + "/editor",
+			dir + "/terminal",
+			dir + "/ssh",
+			dir + "/bin",
+			dir + "/os",
+			dir + "/mcp",
+			dir + "/mcp/servers",
+			dir + "/skills/common",
+			dir + "/agents",
+			dir + "/install",
+			dir + "/resources",
+		}
 		for _, d := range dirs {
 			if err := os.MkdirAll(d, 0755); err != nil {
 				return err
@@ -30,33 +46,44 @@ var newCmd = &cobra.Command{
 		}
 
 		files := map[string]string{
-			dir + "/mainframe.yml":             mainframeYML,
-			dir + "/packages.conf":             packagesConf,
-			dir + "/firewall.conf":             firewallConf,
-			dir + "/.env.template":             envTemplate,
-			dir + "/.gitignore":                gitignore,
-			dir + "/README.md":                 readmeMD,
-			dir + "/projects/example/setup.sh": exampleSetup,
-			dir + "/sync.sh":                   syncSh,
-			dir + "/mcp/config.json":           mcpConfig,
-			dir + "/sandbox.yml":               sandboxYML,
-			dir + "/skills/common/.gitkeep":    "",
-			dir + "/dotfiles/.gitkeep":         "",
+			dir + "/mainframe.yml":          mainframeYML,
+			dir + "/packages.conf":          packagesConf,
+			dir + "/runtimes.conf":          runtimesConf,
+			dir + "/firewall.conf":          firewallConf,
+			dir + "/.env.template":          envTemplate,
+			dir + "/.gitignore":             gitignore,
+			dir + "/README.md":              readmeMD,
+			dir + "/sync.sh":                syncSh,
+			dir + "/mcp/registry.json":      mcpRegistry,
+			dir + "/mcp/config.json":        mcpConfig,
+			dir + "/sandbox.yml":            sandboxYML,
+			dir + "/os.sh":                  osSh,
+			dir + "/shell/zsh/zshrc":        zshrcTemplate,
+			dir + "/git/gitconfig":          gitconfigTemplate,
+			dir + "/ssh/config":             sshConfigTemplate,
+			dir + "/skills/common/.gitkeep": "",
+			dir + "/bin/.gitkeep":           "",
+			dir + "/editor/.gitkeep":        "",
+			dir + "/terminal/.gitkeep":      "",
+			dir + "/agents/.gitkeep":        "",
+			dir + "/install/.gitkeep":       "",
 		}
 		for path, content := range files {
 			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 				return err
 			}
 		}
-		os.Chmod(dir+"/projects/example/setup.sh", 0755)
 		os.Chmod(dir+"/sync.sh", 0755)
 
 		fmt.Printf("Created %s/\n", dir)
 		fmt.Println("Next steps:")
 		fmt.Printf("  cd %s\n", dir)
 		fmt.Println("  cp .env.template .env")
-		fmt.Println("  mf lock")
-		fmt.Println("  sudo mf provision --mode dev")
+		fmt.Println("  # Edit mainframe.yml, packages.conf, runtimes.conf")
+		fmt.Println("  # Add your shell config to shell/")
+		fmt.Println("  # Add your git config to git/")
+		fmt.Println("  # Add your editor config to editor/")
+		fmt.Println("  mf apply")
 		return nil
 	},
 }
@@ -85,54 +112,78 @@ hardening:
   etckeeper: true
   deadman: true
   fail2ban: true
-  fido2: false
-  totp: false
-  auditd: false
-  aide: false
-  noexec_shm: false
-  core_dumps: false
 
 secrets:
   backend: bitwarden
 
 packages: packages.conf
+runtimes: runtimes.conf
+
+dev:
+  shell: shell/
+  git: git/
+  editor: editor/
+  terminal: terminal/
+  ssh: ssh/
+  bin: bin/
+  skills: skills/
+  mcp:
+    registry: mcp/registry.json
+    config: mcp/config.json
+  os: os/darwin.sh
+
+agents:
+  registry: agents/registry.json
+  enabled: []
 `
 
-const packagesConf = `# packages.conf - list of packages to install.
+const packagesConf = `# packages.conf - system packages
 # One package per line. Lines starting with # are comments.
-# Version pins use colon: package:version (e.g., go:1.26.6)
-# OS packages (no version) are installed from the OS repo.
-# Toolchains (with version) are downloaded and checksum-verified.
+# Version pins use colon: package:version
 
 # --- Core ---
-docker              # Container runtime
-git                 # Version control
-curl                # HTTP client
-wget                # File downloader
-jq                  # JSON processor
-unzip               # Archive extraction
-build-essential     # Compilers and build tools
-
-# --- Development toolchains ---
-go:1.26.6           # Go toolchain
-node:22             # Node.js
-python3             # Python
-python3-venv        # Python virtual environments
-
-# --- Database clients ---
-postgresql-client   # psql for migrations
-redis-tools         # redis-cli for debugging
+git
+curl
+wget
+jq
+unzip
 
 # --- CLI tools ---
-gh                  # GitHub CLI
-helm:4.3.0          # Kubernetes package manager
+# gh
+# bw
+# mise
+# fzf
+# ripgrep
+# bat
+
+# --- Development toolchains ---
+# go:1.26.6
+# node:22
+# python3
+# ruby
+
+# --- macOS (brew) ---
+# ghostty
+# tmux
+# neovim
 
 # --- Optional (uncomment if needed) ---
-# bw                # Bitwarden CLI (secret management)
-# osv-scanner       # Vulnerability scanner
-# tmux              # Terminal multiplexer
-# htop              # Process monitor
-# ncdu              # Disk usage analyzer
+# osv-scanner
+# delta
+# zoxide
+# starship
+# uv
+# eza
+`
+
+const runtimesConf = `# runtimes.conf - language runtimes via mise
+# Format: tool@version (mise format)
+
+# node@22
+# ruby@4.0
+# python@3.12
+# go@1.26
+# rust@stable
 `
 
 const firewallConf = `# firewall.conf - custom firewall rules.
@@ -145,19 +196,16 @@ const envTemplate = `# Environment variables for mainframe.
 # Source with: source .env
 
 # Tailscale (required for private network access)
-export TAILSCALE_AUTHKEY="tskey-auth-..."
+# export TAILSCALE_AUTHKEY="tskey-auth-..."
 
 # GitHub (required for cloning repos and pushing)
-export GH_TOKEN="ghp_..."
+# export GH_TOKEN="ghp_..."
 
 # Bitwarden (optional, for secret management)
 # export BW_EMAIL="your@email.com"
 
 # VPS name (default: mainframe)
 # export VPS_NAME="mainframe"
-
-# Uptime monitoring (healthchecks.io, Better Stack, etc.)
-# export HEALTHCHECK_URL="https://hc-ping.com/your-uuid"
 
 # Base code directory (default: /code)
 # export BASE_DIR="/code"
@@ -182,19 +230,17 @@ Thumbs.db
 const readmeMD = "# Mainframe project\n\nProvisioned with mf. See https://github.com/anywaye/mainframe for docs.\n"
 
 const syncSh = `#!/usr/bin/env bash
-# sync.sh - sync personal dev configs (skills, MCP, dotfiles)
-# Run after mf provision: bash sync.sh
+# sync.sh - sync personal dev configs
 set -euo pipefail
 
-CONFIG_REPO="${CONFIG_REPO:-https://github.com/your-org/devbox-config.git}"
+CONFIG_REPO="${CONFIG_REPO:-https://github.com/your-org/mainframe.git}"
 BASE_DIR="${BASE_DIR:-/code}"
 
 echo "=== Syncing dev configs ==="
 
-# Clone config repo
 rm -rf /tmp/devbox-config
 git clone "$CONFIG_REPO" /tmp/devbox-config 2>/dev/null || {
-    echo "Warning: could not clone config repo. Skipping config sync."
+    echo "Warning: could not clone config repo. Skipping."
     exit 0
 }
 
@@ -212,29 +258,25 @@ if [ -f /tmp/devbox-config/mcp/config.json ]; then
     echo "MCP config synced."
 fi
 
-# Sync dotfiles
-if [ -d /tmp/devbox-config/dotfiles ]; then
-    for f in /tmp/devbox-config/dotfiles/.* /tmp/devbox-config/dotfiles/*; do
-        [ -f "$f" ] && ln -sf "$f" ~/$(basename "$f")
-    done
-    echo "Dotfiles synced."
-fi
+# Sync dotfiles (shell, git, editor, terminal)
+for dir in shell git editor terminal; do
+    if [ -d "/tmp/devbox-config/$dir" ]; then
+        echo "Syncing $dir..."
+    fi
+done
 
-# Clone project repos (customize this list)
-# for repo in anywaye boax ship; do
-#     if [ ! -d "$BASE_DIR/$repo" ]; then
-#         git clone "https://$GH_TOKEN@github.com/your-org/$repo.git" "$BASE_DIR/$repo"
-#     else
-#         cd "$BASE_DIR/$repo" && git pull
-#     fi
-# done
-
-# Pull secrets (if bw is available)
+# Pull secrets
 if command -v bw &>/dev/null; then
     bw sync 2>/dev/null || true
 fi
 
 echo "=== Sync complete ==="
+`
+
+const mcpRegistry = `{
+  "servers": {},
+  "version": 1
+}
 `
 
 const mcpConfig = `{
@@ -244,9 +286,7 @@ const mcpConfig = `{
 }
 `
 
-const sandboxYML = `# sandbox.yml - Dev environment spec for boax sandboxes
-# Place this in any project repo under .boax/sandbox.yml
-
+const sandboxYML = `# sandbox.yml - Dev environment spec
 base: ubuntu:24.04
 packages: packages.conf
 provision: sync.sh
@@ -260,21 +300,53 @@ secrets:
 repos: []
 `
 
-const exampleSetup = `#!/usr/bin/env bash
-# Example project setup script.
-set -euo pipefail
+const osSh = `# os.sh - OS-specific settings (optional)
+# Sourced by mf apply on all platforms.
+# Add OS-conditional blocks:
 
-PROJECT_NAME="example"
-BASE_DIR="${BASE_DIR:-/code}"
-CODE_DIR="$BASE_DIR/$PROJECT_NAME"
+# if [[ "$(uname)" == "Darwin" ]]; then
+#   defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+# fi
 
-echo "=== Setting up project: $PROJECT_NAME ==="
+# if [[ "$(uname)" == "Linux" ]]; then
+#   sysctl -w net.ipv4.ip_forward=1
+# fi
+`
 
-mkdir -p "$CODE_DIR"
-cd "$CODE_DIR"
+const zshrcTemplate = `# Shell configuration managed by mainframe
+# Add your zsh config here
 
-# Clone your repos here
-# git clone "https://\$GH_TOKEN@github.com/your-org/your-repo.git" your-repo
+export DOTFILES="${MAINFRAME_DIR:-$HOME/.mainframe}"
 
-echo "Project $PROJECT_NAME set up in $CODE_DIR"
+# Source utils
+[[ -f "$DOTFILES/shell/zsh/utils.zsh" ]] && source "$DOTFILES/shell/zsh/utils.zsh"
+
+# Add your aliases, functions, and settings below
+`
+
+const gitconfigTemplate = `# Git configuration
+[user]
+    name = Your Name
+    email = your@email.com
+
+[init]
+    defaultBranch = main
+
+[core]
+    editor = nvim
+`
+
+const sshConfigTemplate = `# SSH configuration
+# Identity files are managed by mainframe (fetched from password manager)
+
+Host *
+    AddKeysToAgent yes
+    UseKeychain yes
+    IdentitiesOnly yes
+
+# GitHub
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519
 `

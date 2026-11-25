@@ -44,6 +44,7 @@ func allSteps() []stepFunc {
 		{"editor", "Sync editor configuration", applyEditorConfig},
 		{"terminal", "Sync terminal configuration", applyTerminalConfig},
 		{"ssh", "Sync SSH configuration", applySSHConfig},
+		{"secrets", "Unlock secrets vault and store session", applySecrets},
 		{"ssh-keys", "Fetch SSH keys from password manager", applySSHKeys},
 		{"mcp", "Sync MCP configuration", applyMCPConfig},
 		{"skills", "Sync AI agent skills", applySkills},

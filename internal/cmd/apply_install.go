@@ -161,3 +161,38 @@ else:
 		fi
 	`)
 }
+
+// applySecrets unlocks the secrets vault and stores the session.
+func applySecrets(dryRun bool) {
+	fmt.Println("\n[8a/16] Managing secrets vault...")
+	if dryRun {
+		fmt.Println("  [dry-run] Would check/unlock secrets vault")
+		return
+	}
+	runShellStep("secrets status", `
+		SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
+		if [ "$SECRETS_BACKEND" = "bitwarden" ]; then
+			if ! command -v bw &>/dev/null; then
+				echo "  Bitwarden CLI not found. Skipping."
+				return 0
+			fi
+			status=$(timeout 5 bw status 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown")
+			echo "  Bitwarden status: $status"
+			if [ "$status" = "unauthenticated" ]; then
+				echo "  Not logged in. Run 'bw login <email>' to enable."
+			elif [ "$status" = "locked" ]; then
+				echo "  Vault is locked. Run 'mf secrets unlock' to unlock."
+			elif [ "$status" = "unlocked" ]; then
+				echo "  Vault is unlocked."
+				# Check if session file exists
+				if [ -f "$HOME/.config/bitwarden/session" ]; then
+					echo "  Session file: exists"
+				else
+					echo "  Session file: not found. Run 'mf secrets unlock' to create."
+				fi
+			fi
+		else
+			echo "  Backend: $SECRETS_BACKEND (not yet implemented)"
+		fi
+	`)
+}

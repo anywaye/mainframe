@@ -182,7 +182,10 @@ var applyCmd = &cobra.Command{
 						if [ -L "$target" ]; then
 							echo "  $target already linked"
 						elif [ -e "$target" ]; then
-							echo "  $target exists (skipping)"
+							cp "$target" "$target.bak.$(date +%s)" 2>/dev/null
+							rm -f "$target"
+							ln -s "$(pwd)/$f" "$target"
+							echo "  Replaced $target (backup saved)"
 						else
 							ln -s "$(pwd)/$f" "$target"
 							echo "  Linked $target"

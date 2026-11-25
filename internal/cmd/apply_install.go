@@ -107,8 +107,40 @@ func applySSHKeys(dryRun bool) {
 			elif timeout 5 bw status 2>/dev/null | grep -q '"status":"locked"'; then
 				echo "  Vault is locked. Run 'bw unlock' to unlock."
 			elif timeout 5 bw status 2>/dev/null | grep -q '"status":"unlocked"'; then
-				echo "  Vault is unlocked. SSH key fetch ready."
-				echo "  (Manual step: bw get item 'SSH Key' | jq -r '.notes')"
+				echo "  Vault is unlocked. Fetching SSH keys..."
+				# Fetch SSH keys referenced in mainframe.yml
+				# Keys are stored as secure notes in Bitwarden
+				for item_name in "GitHub SSH Key" "dev-mf SSH Key"; do
+					key_path=""
+					case "$item_name" in
+						"GitHub SSH Key") key_path="$HOME/.ssh/id_ed25519" ;;
+						"dev-mf SSH Key") key_path="$HOME/.ssh/dev-mf" ;;
+					esac
+					if [ -n "$key_path" ] && [ ! -f "$key_path" ]; then
+						echo "  Fetching: $item_name → $key_path"
+						bw get item "$item_name" 2>/dev/null | python3 -c "
+import json, sys, re
+data = json.load(sys.stdin)
+notes = data.get('notes', '')
+# Extract private key from notes
+match = re.search(r'-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----', notes, re.DOTALL)
+if match:
+    key = match.group(0)
+    with open('$key_path', 'w') as f:
+        f.write(key + '\n')
+    print('  Written to $key_path')
+else:
+    print('  No private key found in notes')
+" 2>/dev/null
+						if [ -f "$key_path" ]; then
+							chmod 600 "$key_path"
+							echo "  Permissions set: 600"
+						fi
+					else
+						echo "  $key_path already exists. Skipping."
+					fi
+				done
+				echo "  SSH key fetch complete"
 			fi
 		else
 			echo "  Bitwarden CLI not found. Skipping SSH key fetch."

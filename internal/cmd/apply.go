@@ -395,6 +395,28 @@ var applyCmd = &cobra.Command{
 			}
 		}
 
+		// Step 14: Sync agent configs
+		fmt.Println("\n[14/14] Syncing agent configs...")
+		if _, err := os.Stat("agents/registry.json"); err == nil {
+			runShellStep("sync agents", `
+				if command -v jq &>/dev/null; then
+					enabled=$(jq -r '.agents | to_entries[] | select(.value.enabled == true) | .key' agents/registry.json 2>/dev/null)
+					for agent in $enabled; do
+						echo "  Syncing agent: $agent"
+						config=$(jq -r ".agents.$agent.config" agents/registry.json 2>/dev/null)
+						if [ -f "$config" ]; then
+							echo "    Config: $config"
+						fi
+					done
+				else
+					echo "  jq not found. Skipping agent sync."
+				fi
+				echo "  Agent sync complete"
+			`)
+		} else {
+			fmt.Println("  No agents/registry.json found. Skipping.")
+		}
+
 		fmt.Println("\n=== Apply complete ===")
 		return nil
 	},

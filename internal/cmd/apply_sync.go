@@ -252,3 +252,25 @@ func applyBinScripts(dryRun bool) {
 		done
 	`)
 }
+
+
+// applyCustomInstalls runs custom install scripts from install/ directory.
+func applyCustomInstalls(dryRun bool) {
+	fmt.Println("\n[12b/14] Running custom install scripts...")
+	if _, err := os.Stat("install"); err != nil {
+		fmt.Println("  No install/ directory. Skipping.")
+		return
+	}
+	if dryRun {
+		fmt.Println("  [dry-run] Would run install/*.sh scripts")
+		return
+	}
+	runShellStep("custom installs", `
+		for script in install/*.sh; do
+			[ -f "$script" ] || continue
+			echo "  Running: $script"
+			bash "$script" 2>&1 | tail -3 || echo "  Warning: $script failed"
+		done
+		echo "  Custom installs complete"
+	`)
+}

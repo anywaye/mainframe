@@ -38,6 +38,7 @@ func allSteps() []stepFunc {
 		}},
 		{"packages", "Install system packages", applyPackages},
 		{"runtimes", "Install language runtimes", applyRuntimes},
+		{"custom-installs", "Run custom install scripts", applyCustomInstalls},
 		{"shell", "Sync shell configuration", applyShellConfig},
 		{"git", "Sync git configuration", applyGitConfig},
 		{"editor", "Sync editor configuration", applyEditorConfig},

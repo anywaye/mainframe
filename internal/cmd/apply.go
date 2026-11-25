@@ -160,6 +160,33 @@ var applyCmd = &cobra.Command{
 							echo "  Linked $target"
 						fi
 					done
+					# Symlink zshrc from shell/zsh/ if exists
+					if [ -f "shell/zsh/zshrc" ]; then
+						target="$HOME/.zshrc"
+						if [ -L "$target" ]; then echo "  $target already linked"
+						elif [ -e "$target" ]; then
+							cp "$target" "$target.bak.$(date +%s)" 2>/dev/null
+							rm -f "$target"
+							ln -s "$(pwd)/shell/zsh/zshrc" "$target"
+							echo "  Replaced $target (backup saved)"
+						else
+							ln -s "$(pwd)/shell/zsh/zshrc" "$target"
+							echo "  Linked $target"
+						fi
+					fi
+					if [ -f "shell/zsh/zshenv" ]; then
+						target="$HOME/.zshenv"
+						if [ -L "$target" ]; then echo "  $target already linked"
+						elif [ -e "$target" ]; then
+							cp "$target" "$target.bak.$(date +%s)" 2>/dev/null
+							rm -f "$target"
+							ln -s "$(pwd)/shell/zsh/zshenv" "$target"
+							echo "  Replaced $target (backup saved)"
+						else
+							ln -s "$(pwd)/shell/zsh/zshenv" "$target"
+							echo "  Linked $target"
+						fi
+					fi
 				`)
 			}
 		} else {
@@ -233,6 +260,13 @@ var applyCmd = &cobra.Command{
 						cp -r "$dir"* "$target/" 2>/dev/null || true
 						echo "  Synced $name → $target"
 					done
+					# Ghostty on macOS uses a different config path
+					if [ -d "terminal/ghostty" ] && [ "$(uname)" = "Darwin" ]; then
+						ghostty_dir="$HOME/Library/Application Support/com.mitchellh.ghostty"
+						mkdir -p "$ghostty_dir"
+						cp terminal/ghostty/* "$ghostty_dir/" 2>/dev/null || true
+						echo "  Synced ghostty → $ghostty_dir"
+					fi
 				`)
 			}
 		} else {

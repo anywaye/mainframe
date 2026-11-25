@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,4 +105,42 @@ func (l *applyLogger) close() {
 	if l.logFile != nil {
 		l.logFile.Close()
 	}
+}
+
+// applyState tracks which steps have been completed for resume capability.
+type applyState struct {
+	CompletedSteps []string  `json:"completed_steps"`
+	LastRun        time.Time `json:"last_run"`
+	ConfigDir      string    `json:"config_dir"`
+}
+
+// stateFilePath returns the path to the state file.
+func stateFilePath() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".mainframe", "apply.state")
+}
+
+// loadApplyState loads the previous apply state.
+func loadApplyState() *applyState {
+	data, err := os.ReadFile(stateFilePath())
+	if err != nil {
+		return nil
+	}
+	var state applyState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil
+	}
+	return &state
+}
+
+// saveApplyState saves the current apply state.
+func saveApplyState(state *applyState) {
+	data, _ := json.MarshalIndent(state, "", "  ")
+	os.MkdirAll(filepath.Dir(stateFilePath()), 0755)
+	os.WriteFile(stateFilePath(), data, 0644)
+}
+
+// clearApplyState removes the state file.
+func clearApplyState() {
+	os.Remove(stateFilePath())
 }

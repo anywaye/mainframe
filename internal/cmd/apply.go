@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 	"strings"
 
 	"github.com/anywaye/mainframe/internal/assets"
@@ -17,6 +18,7 @@ var applyDryRun bool
 var applyOnly string
 var applySkip string
 var applyList bool
+var applyResume bool
 var applyVerbose int
 
 // stepFunc defines a named apply step.
@@ -183,10 +185,44 @@ List available steps:
 		logger := initApplyLogger(applyVerbose)
 		defer logger.close()
 
+		// Load previous state for resume
+		state := loadApplyState()
+		if applyResume && state != nil {
+			fmt.Printf("Resuming from previous run (%s)\n", state.LastRun.Format("2006-01-02 15:04:05"))
+			completed := map[string]bool{}
+			for _, s := range state.CompletedSteps {
+				completed[s] = true
+			}
+			var remaining []stepFunc
+			for _, step := range selected {
+				if !completed[step.name] {
+					remaining = append(remaining, step)
+				} else {
+					fmt.Printf("  Skipping %s (already completed)\n", step.name)
+				}
+			}
+			selected = remaining
+		}
+
+		if state == nil {
+			state = &applyState{ConfigDir: configDir}
+		}
+
 		for _, step := range selected {
 			start := logger.startStep(step.name)
 			step.fn(applyDryRun)
 			logger.endStep(step.name, start, "done")
+
+			// Update state
+			state.CompletedSteps = append(state.CompletedSteps, step.name)
+			state.LastRun = time.Now()
+			state.ConfigDir = configDir
+			saveApplyState(state)
+		}
+
+		// Clear state on successful completion
+		if !applyDryRun {
+			clearApplyState()
 		}
 
 		logger.printSummary()
@@ -219,6 +255,7 @@ func init() {
 	applyCmd.Flags().StringVar(&applyOnly, "only", "", "Run only these steps (comma-separated)")
 	applyCmd.Flags().StringVar(&applySkip, "skip", "", "Skip these steps (comma-separated)")
 	applyCmd.Flags().BoolVar(&applyList, "list", false, "List available steps")
+	applyCmd.Flags().BoolVar(&applyResume, "resume", false, "Resume from previous interrupted run")
 	applyCmd.Flags().IntVarP(&applyVerbose, "verbose", "v", 0, "Verbose level (0=normal, 1=timing, 2=debug)")
 	rootCmd.AddCommand(applyCmd)
 }

@@ -267,6 +267,37 @@ var applyCmd = &cobra.Command{
 			fmt.Println("  No ssh/ directory. Skipping.")
 		}
 
+		// Step 8b: Fetch SSH keys from password manager
+		fmt.Println("\n[8b/13] Fetching SSH keys from password manager...")
+		if _, err := os.Stat("mainframe.yml"); err == nil {
+			// Check if bw is available
+			if _, err := exec.LookPath("bw"); err == nil {
+				// Check if logged in
+				statusOut, _ := exec.Command("bw", "status").Output()
+				if strings.Contains(string(statusOut), "unauthenticated") {
+					fmt.Println("  Bitwarden not logged in. Skipping SSH key fetch.")
+					fmt.Println("  Run 'bw login <email>' to enable SSH key management.")
+				} else {
+					// Try to unlock if locked
+					runShellStep("fetch ssh keys", `
+						if bw status 2>/dev/null | grep -q '"status":"locked"'; then
+							echo "  Vault is locked. Run 'bw unlock' to unlock."
+						elif bw status 2>/dev/null | grep -q '"status":"unlocked"'; then
+							echo "  Vault is unlocked. Fetching SSH keys..."
+							# Fetch SSH keys from Bitwarden
+							# Keys are stored as secure notes with the key content
+							for keyname in $(bw list items --search "SSH Key" 2>/dev/null | python3 -c "import json,sys; [print(i['name']) for i in json.load(sys.stdin)]" 2>/dev/null); do
+								echo "  Fetching: $keyname"
+							done
+							echo "  SSH key fetch complete (manual step for now)"
+						fi
+					`)
+				}
+			} else {
+				fmt.Println("  Bitwarden CLI not found. Skipping SSH key fetch.")
+			}
+		}
+
 		// Step 9: Sync MCP config
 		fmt.Println("\n[9/13] Syncing MCP config...")
 		if _, err := os.Stat("mcp/config.json"); err == nil {

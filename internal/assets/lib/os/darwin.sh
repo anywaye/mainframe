@@ -59,7 +59,7 @@ install_packages() {
       return 0
     fi
     echo "[darwin] Installing $pkg..."
-    brew install "$pkg" 2>&1 | tail -2 || echo "[darwin] Warning: failed to install $pkg (may need manual install)"
+    timeout 30 brew install "$pkg" 2>&1 | tail -2 || echo "[darwin] Warning: failed to install $pkg (may need manual install)"
   done < "$conf"
 
   echo "[darwin] Package installation complete."

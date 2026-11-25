@@ -118,6 +118,14 @@ Every directory is optional. The framework applies what's there, skips what's no
 | `mf mcp apply` | Apply MCP config to agents |
 | `mf mcp test SERVER` | Test MCP server |
 
+### Secrets
+| Command | Description |
+|---|---|
+| `mf secrets status` | Show secrets backend status |
+| `mf secrets unlock` | Unlock vault, store session |
+| `mf secrets unlock --passwordenv BW_PASSWORD` | Unlock non-interactively |
+| `mf secrets lock` | Lock vault, remove session |
+
 ### Utilities
 | Command | Description |
 |---|---|

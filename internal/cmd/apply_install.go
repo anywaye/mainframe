@@ -101,12 +101,12 @@ func applySSHKeys(dryRun bool) {
 	}
 	runShellStep("fetch ssh keys", `
 		if command -v bw &>/dev/null; then
-			if bw status 2>/dev/null | grep -q '"status":"unauthenticated"'; then
+			if timeout 5 bw status 2>/dev/null | grep -q '"status":"unauthenticated"'; then
 				echo "  Bitwarden not logged in. Skipping SSH key fetch."
 				echo "  Run 'bw login <email>' to enable SSH key management."
-			elif bw status 2>/dev/null | grep -q '"status":"locked"'; then
+			elif timeout 5 bw status 2>/dev/null | grep -q '"status":"locked"'; then
 				echo "  Vault is locked. Run 'bw unlock' to unlock."
-			elif bw status 2>/dev/null | grep -q '"status":"unlocked"'; then
+			elif timeout 5 bw status 2>/dev/null | grep -q '"status":"unlocked"'; then
 				echo "  Vault is unlocked. SSH key fetch ready."
 				echo "  (Manual step: bw get item 'SSH Key' | jq -r '.notes')"
 			fi

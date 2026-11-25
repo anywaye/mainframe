@@ -17,6 +17,7 @@ var applyDryRun bool
 var applyOnly string
 var applySkip string
 var applyList bool
+var applyVerbose int
 
 // stepFunc defines a named apply step.
 type stepFunc struct {
@@ -178,10 +179,17 @@ List available steps:
 			fmt.Printf("Running %d of %d steps\n", len(selected), len(steps))
 		}
 
+		// Initialize logger
+		logger := initApplyLogger(applyVerbose)
+		defer logger.close()
+
 		for _, step := range selected {
+			start := logger.startStep(step.name)
 			step.fn(applyDryRun)
+			logger.endStep(step.name, start, "done")
 		}
 
+		logger.printSummary()
 		fmt.Println("\n=== Apply complete ===")
 		return nil
 	},
@@ -211,5 +219,6 @@ func init() {
 	applyCmd.Flags().StringVar(&applyOnly, "only", "", "Run only these steps (comma-separated)")
 	applyCmd.Flags().StringVar(&applySkip, "skip", "", "Skip these steps (comma-separated)")
 	applyCmd.Flags().BoolVar(&applyList, "list", false, "List available steps")
+	applyCmd.Flags().IntVarP(&applyVerbose, "verbose", "v", 0, "Verbose level (0=normal, 1=timing, 2=debug)")
 	rootCmd.AddCommand(applyCmd)
 }

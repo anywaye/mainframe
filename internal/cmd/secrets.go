@@ -15,6 +15,10 @@ var secretsCmd = &cobra.Command{
 	Short: "Manage secrets (Bitwarden, 1Password, etc.)",
 }
 
+var secretsUnlockPassword string
+var secretsUnlockPasswordEnv string
+var secretsUnlockPasswordFile string
+
 var secretsUnlockCmd = &cobra.Command{
 	Use:   "unlock",
 	Short: "Unlock secrets vault and store session",
@@ -42,10 +46,21 @@ var secretsUnlockCmd = &cobra.Command{
 			return nil
 		}
 
-		// Unlock (interactive)
+		// Build unlock command
+		unlockArgs := []string{"unlock", "--raw"}
+		if secretsUnlockPassword != "" {
+			unlockArgs = append(unlockArgs, secretsUnlockPassword)
+		} else if secretsUnlockPasswordEnv != "" {
+			unlockArgs = append([]string{"--passwordenv", secretsUnlockPasswordEnv}, unlockArgs...)
+		} else if secretsUnlockPasswordFile != "" {
+			unlockArgs = append([]string{"--passwordfile", secretsUnlockPasswordFile}, unlockArgs...)
+		}
+
 		fmt.Println("Unlocking Bitwarden vault...")
-		unlockCmd := exec.Command("bw", "unlock", "--raw")
-		unlockCmd.Stdin = os.Stdin
+		unlockCmd := exec.Command("bw", unlockArgs...)
+		if secretsUnlockPassword == "" && secretsUnlockPasswordEnv == "" && secretsUnlockPasswordFile == "" {
+			unlockCmd.Stdin = os.Stdin
+		}
 		unlockCmd.Stderr = os.Stderr
 		out, err := unlockCmd.Output()
 		if err != nil {
@@ -132,6 +147,9 @@ var secretsLockCmd = &cobra.Command{
 }
 
 func init() {
+	secretsUnlockCmd.Flags().StringVar(&secretsUnlockPassword, "password", "", "Master password (insecure, use --passwordenv or --passwordfile)")
+	secretsUnlockCmd.Flags().StringVar(&secretsUnlockPasswordEnv, "passwordenv", "", "Environment variable storing password")
+	secretsUnlockCmd.Flags().StringVar(&secretsUnlockPasswordFile, "passwordfile", "", "File containing password")
 	secretsCmd.AddCommand(secretsUnlockCmd)
 	secretsCmd.AddCommand(secretsStatusCmd)
 	secretsCmd.AddCommand(secretsLockCmd)

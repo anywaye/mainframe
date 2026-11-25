@@ -1,267 +1,152 @@
 # Mainframe
 
-**Secure, reproducible VPS bootstrap for developers.**
+**Secure, reproducible VPS bootstrap and machine configuration for developers.**
 
-Take a fresh Linux VPS to a hardened, configured box in one command.
+Take a fresh machine to a fully configured dev box in one command.
 Supports both **dev** and **prod** modes.
 
 ```sh
-# Dev box (interactive, tools, relaxed firewall)
-mf provision --mode dev
-
-# Production server (hardened, tailscale-only, k3s-ready)
-mf provision --mode prod
-```
-
-## Table of Contents
-
-- [When to use mainframe](#when-to-use-mainframe)
-- [Install](#install)
-- [Quick start](#quick-start)
-- [Commands](#commands)
-- [Security](#security)
-- [Configuration](#configuration)
-- [SSH recovery](#ssh-recovery)
-- [OS support](#os-support)
-- [Requirements](#requirements)
-- [License](#license)
-
----
-
-## When to use mainframe
-
-**You just got a new VPS** and need to:
-- Set up SSH, firewall, and security hardening
-- Install dev tools (Go, Node, Docker, etc.)
-- Join a Tailscale network for private access
-- Have a reproducible setup you can re-run or share
-
-**You're managing multiple VPSes** and want:
-- Consistent security baseline across all of them
-- A deadman switch so you can't lock yourself out
-- Easy recovery if something breaks
-- Audit scoring to track security posture
-
-**You're NOT looking for:**
-- A full PaaS or container orchestrator (use k3s/Docker directly)
-- A configuration management tool like Ansible (mainframe is simpler, opinionated)
-
----
-
-## Install
-
-```sh
-# On your VPS (as root):
+# Install the mf CLI
 curl -fsSL https://get.mainframe.sh | bash
 
-# Or clone and build:
-git clone https://github.com/anywaye/mainframe.git
-cd mainframe
-make build && make install
+# Create a new config repo
+mf new my-mainframe
+cd my-mainframe
+
+# Apply config to this machine
+mf apply
+
+# Or clone an existing config repo
+mf init https://github.com/kaka-ruto/mainframe.git
+mf apply
 ```
 
-Verify: `mf version`
+## Philosophy
 
-## Quick start
+**Mainframe is a framework, not a configuration.**
 
-### Step 1: Get a VPS
+Like Rails provides the structure for web apps, Mainframe provides the structure for machine configurations. You don't write the framework — you write your config. The framework handles the how; you provide the what.
 
-Any provider (Contabo, Hetzner, DigitalOcean, Vultr). Minimum:
-- 2 vCPU, 4GB RAM, 40GB SSD
-- Ubuntu 24.04 LTS (or Debian, Fedora, Arch, Alpine)
-- Root SSH access
+- `mf new my-mainframe` scaffolds the structure
+- You fill in `packages.conf`, `shell/`, `editor/`, `mcp/`, etc.
+- `mf apply` reads your config and sets up any machine
+- `mf capture` scans a machine and generates config
 
-### Step 2: Set environment variables
+**The framework provides the structure and logic. The user provides the content.**
 
-```sh
-export TAILSCALE_AUTHKEY="tskey-auth-..."   # from Tailscale admin console
-export GH_TOKEN="ghp_..."                  # GitHub PAT (repo + packages:write)
-export BW_EMAIL="your@email.com"           # optional, for Bitwarden secrets
+Not everyone uses zsh. Not everyone uses neovim. Not everyone uses tmux. Mainframe doesn't assume any of these. If a directory is empty, it's skipped. If a section is missing, it's ignored. You use what you need, skip what you don't.
+
+The framework grows with you. As your tools change, your config changes. As the framework adds features, your existing config keeps working. `mf apply` is idempotent — run it 100 times, it's safe every time.
+
+## Two repos, one system
+
+| | Framework (`anywaye/mainframe`) | Config (`your-org/mainframe`) |
+|---|---|---|
+| **What** | CLI tool + OS provisioning engine | Your personal configuration |
+| **Installed via** | `curl -fsSL https://get.mainframe.sh \| bash` | `mf init <url>` |
+| **Edited by** | Framework maintainers | You |
+| **Contains** | Go code, shell scripts, templates | YAML, JSON, shell configs, dotfiles |
+| **OS-specific** | `lib/os/<family>.sh` (provisioning logic) | `os/<family>.sh` (your preferences, optional) |
+
+The framework is installed once. The config repo is cloned per-machine. The framework reads the config repo and applies it.
+
+## Config repo structure
+
+```
+my-mainframe/
+├── mainframe.yml          # Machine config (mode, secrets, references)
+├── packages.conf          # System packages (brew/apt/dnf)
+├── runtimes.conf          # Language versions (mise format)
+├── mcp/                   # MCP servers (registry + configs)
+├── skills/                # AI agent skills
+├── shell/                 # Shell config (optional)
+├── git/                   # Git config (optional)
+├── editor/                # Editor config (optional)
+├── terminal/              # Terminal config (optional)
+├── ssh/                   # SSH config (optional, no keys)
+├── bin/                   # Custom scripts (optional)
+├── os/                    # OS-specific settings (optional)
+├── os.sh                  # OS-conditional settings (optional)
+├── .env.template          # Environment variables (no values)
+├── sandbox.yml            # Sandbox spec
+├── Dockerfile             # Container image
+├── sync.sh                # Sync script
+└── README.md
 ```
 
-### Step 3: Provision
-
-```sh
-# Dev box - interactive, relaxed firewall, dev tools
-mf provision --mode dev
-
-# OR production server - hardened, tailscale-only, no public ports
-mf provision --mode prod
-```
-
-Provisioning takes 5-10 minutes. It will:
-1. Detect your OS
-2. Install packages from packages.conf
-3. Set up Tailscale
-4. Apply security hardening (SSH, firewall, fail2ban, sysctl)
-5. Create /code/ directory
-6. Run a security audit (before/after scores)
-
-### Step 4: Set up your project (optional)
-
-```sh
-bash projects/<name>/setup.sh
-```
-
-### Step 5: Verify
-
-```sh
-mf status          # System status
-mf ssh verify      # SSH health check
-mf audit           # Security audit score
-```
+Every directory is optional. The framework applies what's there, skips what's not.
 
 ## Commands
 
 ### Provisioning
-
 | Command | Description |
 |---|---|
-| `mf provision --mode dev` | Provision a dev VPS |
-| `mf provision --mode prod` | Provision a prod VPS |
+| `mf provision` | Provision a VPS (dev mode, default) |
+| `mf provision --mode prod` | Provision a production server |
 | `mf provision --dry-run` | Preview without executing |
 
-### Security and SSH
-
+### Configuration
 | Command | Description |
 |---|---|
-| `mf harden` | Apply security hardening (auto-arms deadman timer first) |
-| `mf audit` | Run security audit (before/after scoring) |
-| `mf recover` | Emergency recovery - restores SSH if hardening locks you out |
-| `mf ssh verify` | Health check (daemon, port, keys, permissions, firewall) |
-| `mf ssh keygen --emergency` | Generate a break-glass SSH key pair |
-| `mf ssh recover` | Emergency recovery with break-glass key support |
-| `mf deadman arm 5` | Arm deadman timer (5 min) before risky changes |
-| `mf deadman disarm` | Disarm (keep changes) |
-| `mf deadman status` | Show timer status |
+| `mf apply` | Apply config to current machine |
+| `mf apply --dry-run` | Preview without applying |
+| `mf apply --host user@host` | Apply to remote machine |
+| `mf capture` | Scan current machine → generate config |
+| `mf diff` | Show differences between machine and config |
+| `mf sync` | Sync config between machines |
+
+### Project management
+| Command | Description |
+|---|---|
+| `mf new [name]` | Create a new config repo |
+| `mf init <url>` | Clone an existing config repo |
+
+### Security & SSH
+| Command | Description |
+|---|---|
+| `mf harden` | Apply security hardening |
+| `mf audit` | Run security audit |
+| `mf recover` | Emergency recovery |
+| `mf ssh verify` | SSH health check |
+| `mf deadman arm 5` | Arm deadman timer |
+
+### MCP
+| Command | Description |
+|---|---|
+| `mf mcp list` | List MCP servers |
+| `mf mcp add SERVER` | Add MCP server |
+| `mf mcp apply` | Apply MCP config to agents |
+| `mf mcp test SERVER` | Test MCP server |
 
 ### Utilities
-
 | Command | Description |
 |---|---|
+| `mf doctor` | Diagnose issues |
 | `mf status` | Show system status |
-| `mf doctor` | Diagnose common issues (read-only) |
-| `mf doctor --fix` | Diagnose and repair detected issues (idempotent) |
-| `mf doctor --fix --dry-run` | Show what `--fix` would change without applying |
 | `mf version` | Print version |
 | `mf update` | Check for updates |
 
-## Doctor (`mf doctor`)
-
-`mf doctor` checks the VPS for common issues and reports them. By default it is
-read-only and never changes anything.
-
-- `mf doctor` — diagnose only.
-- `mf doctor --fix` — diagnose and apply minimal, idempotent repairs.
-- `mf doctor --fix --dry-run` — show what `--fix` would change without applying.
-
-Checks include SSH keys, Tailscale, firewall, installed tools, directories,
-root password, Go version, and network/flannel settings (rp_filter, FORWARD
-policy, Flannel 8472/udp). On prod/k3s nodes the dev-tool checks are skipped
-automatically.
-
-Repairs are idempotent: re-running `--fix` on an already-healthy box is a no-op.
-
-## Security
-
-### What mainframe does
-
-- **SSH**: Key-only auth, no root login (after hardening), fail2ban with auto-ban
-- **Firewall**: Default deny incoming, allow SSH plus configured ports
-- **Sysctl**: BBR congestion control, redirect/source-route hardening, rp_filter tuned for multi-homed/k3s hosts
-- **Firewall**: default deny incoming; FORWARD policy ACCEPT (k3s pod-to-pod); Flannel VXLAN (8472/udp) allowed between cluster nodes
-- **Unattended upgrades**: Automatic security patches
-- **Deadman switch**: Auto-rolls back SSH/firewall changes if not disarmed within 5 minutes
-- **etckeeper**: Tracks all config changes in git
-
-### What mainframe does NOT do
-
-- Does NOT manage your application code or containers
-- Does NOT replace Docker/k3s/Ansible for app deployment
-- Does NOT store or manage secrets (use Bitwarden/Infisical separately)
-
-### Deadman switch
-
-Before any risky change, arm the deadman:
-```sh
-mainframe-deadman arm 5   # 5 minutes to test
-# Make your change
-# Test from a NEW SSH connection (not the current one!)
-ssh -o ControlPath=none admin@host 'sudo mainframe-deadman disarm'
-# If it fails, wait 5 min - config rolls back automatically
-```
-
-mainframe's `harden` command auto-arms the deadman for you.
-
-### Recovery (if you get locked out)
-
-```sh
-# 1. VNC into the VPS via Contabo panel (or provider's console)
-# 2. Log in as root with the root password
-# 3. Run:
-mf recover
-
-# 4. SSH should now work with password
-ssh -o PreferredAuthentications=password root@<IP>
-
-# 5. Fix the underlying issue
-# 6. Re-harden when ready:
-mf harden
-```
-
-### Break-glass key (recommended, do this once)
-
-```sh
-mf ssh keygen --emergency
-# SAVE THE PRIVATE KEY TO BITWARDEN IMMEDIATELY
-# cat /root/.ssh/breakglass
-```
-
-This key is added to authorized_keys with a "# BREAK-GLASS - DO NOT REMOVE" comment and survives hardening.
-
-## Configuration
-
-All config via environment variables or .env file (from .env.template):
-
-| Variable | Default | Description |
-|---|---|---|
-| TAILSCALE_AUTHKEY | (required) | Tailscale auth key |
-| GH_TOKEN | (required) | GitHub PAT |
-| VPS_NAME | mainframe | Hostname |
-| BASE_DIR | /code | Code directory |
-| BW_EMAIL | (empty) | Bitwarden email (optional) |
-| TAILSCALE_ENABLED | true | Enable Tailscale |
-| MAINFRAME_ENABLED | true | Enable mainframe hardening |
-| FIREWALL_MODE | auto | tailscale-only, public, or custom |
-| FIREWALL_EXTRA_PORTS | (empty) | Additional ports to open |
-| PACKAGES_FILE | ./packages.conf | Path to packages config |
-| PROJECT | (empty) | Project to set up after provisioning |
-
-## Packages
-
-Edit packages.conf to customize which packages are installed. One package per line,
-with comments. Version pins use colon: go:1.26.6.
-
-The OS module reads this file and installs only what's listed. If a package isn't
-available on your OS, it's skipped with a warning.
-
 ## OS support
 
-Multi-OS via lib/os/<family>.sh modules:
-- Debian/Ubuntu (apt) - fully implemented
-- Fedora/RHEL/CentOS (dnf) - partial
-- Arch (pacman) - partial
-- Alpine (apk) - partial
+Multi-OS via `lib/os/<family>.sh` modules:
+- macOS (Darwin) — Homebrew, mise, MAS apps
+- Debian/Ubuntu (apt) — fully implemented
+- Fedora/RHEL/CentOS (dnf) — partial
+- Arch (pacman) — partial
+- Alpine (apk) — partial
 
 Adding a new OS is just adding a new file that implements the standard interface.
 
-## Requirements
+## Modes
 
-- Fresh Linux VPS (Ubuntu 24.04 recommended; Debian, Fedora, Arch, Alpine also supported)
-- Root SSH access
-- Tailscale account (free tier: 100 devices)
-- GitHub PAT (repo + packages:write scopes)
-- Bitwarden account (optional, for secrets)
+- **dev** (default): Interactive, relaxed firewall, dev tools installed
+- **prod**: Hardened, tailscale-only, no public ports, k3s-ready
+
+## Secrets
+
+Secrets are never stored in the config repo. They're referenced by name and fetched from a password manager at apply time.
+
+Supported backends: Bitwarden, 1Password, Infisical, environment variables.
 
 ## License
 

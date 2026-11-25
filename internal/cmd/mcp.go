@@ -74,102 +74,157 @@ func mcpListCmd() *cobra.Command {
 	}
 }
 
+var mcpInstallAll bool
+
 func mcpInstallCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "install SERVER",
-		Short: "Install an MCP server's dependencies",
-		Args:  cobra.ExactArgs(1),
+	cmd := &cobra.Command{
+		Use:   "install [SERVER...]",
+		Short: "Install MCP server dependencies",
+		Long:  "Install dependencies for one or more MCP servers. Use --all to install all enabled servers.",
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
 			reg, err := loadRegistry()
 			if err != nil {
 				return err
 			}
 			servers := reg["servers"].(map[string]interface{})
-			info, ok := servers[name].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("server %q not found in registry", name)
-			}
-			installPath, ok := info["install"].(string)
-			if !ok || installPath == "" {
-				fmt.Printf("No install script for %s (HTTP server, no binaries needed)\n", name)
-				return nil
-			}
-			fmt.Printf("Installing %s...\n", name)
-			c := exec.Command("bash", installPath)
-			c.Stdout = os.Stdout
-			c.Stderr = os.Stderr
-			return c.Run()
-		},
-	}
-}
 
-func mcpTestCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "test SERVER",
-		Short: "Test an MCP server end-to-end",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			reg, err := loadRegistry()
-			if err != nil {
-				return err
-			}
-			servers := reg["servers"].(map[string]interface{})
-			info, ok := servers[name].(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("server %q not found in registry", name)
-			}
-			configPath := info["config"].(string)
-			data, err := os.ReadFile(configPath)
-			if err != nil {
-				return err
-			}
-			var serverConfig map[string]interface{}
-			if err := json.Unmarshal(data, &serverConfig); err != nil {
-				return err
-			}
-			sType := serverConfig["type"].(string)
-			fmt.Printf("Testing %s (%s)...\n", name, sType)
-
-			if sType == "http" {
-				url := serverConfig["url"].(string)
-				fmt.Printf("  URL: %s\n", url)
-				c := exec.Command("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", url)
-				out, _ := c.Output()
-				fmt.Printf("  HTTP status: %s\n", string(out))
-				if string(out) == "200" || string(out) == "405" {
-					fmt.Println("  OK Server reachable")
-				} else {
-					fmt.Println("  FAIL Server not reachable")
-				}
-			} else {
-				cmd := serverConfig["command"].(string)
-				args := []string{}
-				if a, ok := serverConfig["args"].([]interface{}); ok {
-					for _, arg := range a {
-						args = append(args, arg.(string))
+			// Determine which servers to install
+			var toInstall []string
+			if mcpInstallAll {
+				for name, info := range servers {
+					infoMap := info.(map[string]interface{})
+					enabled, _ := infoMap["enabled"].(bool)
+					if enabled {
+						toInstall = append(toInstall, name)
 					}
 				}
-				input := `{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}` + "\n"
-				c := exec.Command(cmd, args...)
-				c.Stdin = strings.NewReader(input)
-				out, err := c.Output()
-				if err != nil {
-					fmt.Printf("  FAIL Failed to start: %v\n", err)
-					return nil
+			} else if len(args) > 0 {
+				toInstall = args
+			} else {
+				return fmt.Errorf("specify SERVER names or use --all")
+			}
+
+			if len(toInstall) == 0 {
+				fmt.Println("No servers to install.")
+				return nil
+			}
+
+			for _, name := range toInstall {
+				info, ok := servers[name].(map[string]interface{})
+				if !ok {
+					fmt.Printf("Server %q not found in registry. Skipping.\n", name)
+					continue
 				}
-				if strings.Contains(string(out), "protocolVersion") {
-					fmt.Println("  OK MCP handshake successful")
+				installPath, ok := info["install"].(string)
+				if !ok || installPath == "" {
+					fmt.Printf("No install script for %s (HTTP server, no binaries needed)\n", name)
+					continue
+				}
+				fmt.Printf("Installing %s...\n", name)
+				c := exec.Command("bash", installPath)
+				c.Stdout = os.Stdout
+				c.Stderr = os.Stderr
+				if err := c.Run(); err != nil {
+					fmt.Printf("  Warning: %s install failed: %v\n", name, err)
+				}
+			}
+
+			fmt.Println("Installation complete.")
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&mcpInstallAll, "all", false, "Install all enabled servers")
+	return cmd
+}
+
+var mcpTestAll bool
+
+func mcpTestCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "test [SERVER...]",
+		Short: "Test MCP server(s) end-to-end",
+		Long:  "Test one or more MCP servers. Use --all to test all enabled servers.",
+		Args:  cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reg, err := loadRegistry()
+			if err != nil {
+				return err
+			}
+			servers := reg["servers"].(map[string]interface{})
+
+			var toTest []string
+			if mcpTestAll {
+				for name, info := range servers {
+					infoMap := info.(map[string]interface{})
+					enabled, _ := infoMap["enabled"].(bool)
+					if enabled {
+						toTest = append(toTest, name)
+					}
+				}
+			} else if len(args) > 0 {
+				toTest = args
+			} else {
+				return fmt.Errorf("specify SERVER names or use --all")
+			}
+
+			for _, name := range toTest {
+				info, ok := servers[name].(map[string]interface{})
+				if !ok {
+					fmt.Printf("Server %q not found. Skipping.\n", name)
+					continue
+				}
+				configPath := info["config"].(string)
+				data, err := os.ReadFile(configPath)
+				if err != nil {
+					fmt.Printf("  %s: FAIL (config not found)\n", name)
+					continue
+				}
+				var serverConfig map[string]interface{}
+				if err := json.Unmarshal(data, &serverConfig); err != nil {
+					fmt.Printf("  %s: FAIL (invalid config)\n", name)
+					continue
+				}
+				sType := serverConfig["type"].(string)
+				fmt.Printf("Testing %s (%s)...\n", name, sType)
+
+				if sType == "http" {
+					url := serverConfig["url"].(string)
+					c := exec.Command("curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", url)
+					out, _ := c.Output()
+					status := strings.TrimSpace(string(out))
+					if status == "200" || status == "405" {
+						fmt.Printf("  OK Server reachable (HTTP %s)\n", status)
+					} else {
+						fmt.Printf("  FAIL Server not reachable (HTTP %s)\n", status)
+					}
 				} else {
-					fmt.Printf("  FAIL Unexpected response: %s\n", string(out)[:200])
+					cmd := serverConfig["command"].(string)
+					args := []string{}
+					if a, ok := serverConfig["args"].([]interface{}); ok {
+						for _, arg := range a {
+							args = append(args, arg.(string))
+						}
+					}
+					input := `{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}` + "\n"
+					c := exec.Command(cmd, args...)
+					c.Stdin = strings.NewReader(input)
+					out, err := c.Output()
+					if err != nil {
+						fmt.Printf("  FAIL Failed to start: %v\n", err)
+					} else if strings.Contains(string(out), "protocolVersion") {
+						fmt.Println("  OK MCP handshake successful")
+					} else {
+						fmt.Printf("  FAIL Unexpected response: %s\n", string(out)[:200])
+					}
 				}
 			}
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&mcpTestAll, "all", false, "Test all enabled servers")
+	return cmd
 }
-
 
 func mcpAddCmd() *cobra.Command {
 	return &cobra.Command{

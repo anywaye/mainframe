@@ -38,6 +38,7 @@ var newCmd = &cobra.Command{
 			dir + "/agents",
 			dir + "/install",
 			dir + "/resources",
+			dir + "/fleet",
 		}
 		for _, d := range dirs {
 			if err := os.MkdirAll(d, 0755); err != nil {
@@ -68,6 +69,8 @@ var newCmd = &cobra.Command{
 			dir + "/terminal/.gitkeep":      "",
 			dir + "/agents/.gitkeep":        "",
 			dir + "/install/.gitkeep":       "",
+			dir + "/fleet/dev.yml":           fleetDevYML,
+			dir + "/fleet/prod.yml":          fleetProdYML,
 		}
 		for path, content := range files {
 			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
@@ -377,4 +380,20 @@ Host github.com
     HostName github.com
     User git
     IdentityFile ~/.ssh/id_ed25519
+`
+
+const fleetDevYML = `name: dev
+description: "Development machines"
+boax: false
+machines: []
+# Add machines with: mf fleet add dev <name> --host <host> --os <os>
+# Or edit this file directly.
+`
+
+const fleetProdYML = `name: prod
+description: "Production servers"
+boax: false
+machines: []
+# Add machines with: mf fleet add prod <name> --host <host> --os <os>
+# Or edit this file directly.
 `

@@ -6,8 +6,13 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/spf13/cobra"
 )
+
+var initMachineName string
+var initFleetName string
 
 var initCmd = &cobra.Command{
 	Use:   "init [repo-url]",
@@ -33,6 +38,28 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("failed to clone repo: %w", err)
 		}
 
+		// Write machine identity
+		machineName := initMachineName
+		if machineName == "" {
+			machineName = "machine"
+		}
+		fleetName := initFleetName
+		if fleetName == "" {
+			fleetName = "dev"
+		}
+
+		machineFile := filepath.Join(configDir, "machine")
+		machineData := map[string]string{
+			"name":  machineName,
+			"fleet": fleetName,
+		}
+		machineYAML, _ := yaml.Marshal(machineData)
+		if err := os.WriteFile(machineFile, machineYAML, 0644); err != nil {
+			fmt.Printf("Warning: could not write machine identity: %v\n", err)
+		} else {
+			fmt.Printf("Machine identity written: %s (fleet: %s)\n", machineName, fleetName)
+		}
+
 		// Set MAINFRAME_DIR
 		fmt.Printf("\nConfig cloned to %s\n", configDir)
 		fmt.Println("Set MAINFRAME_DIR in your shell profile:")
@@ -44,5 +71,7 @@ var initCmd = &cobra.Command{
 }
 
 func init() {
+	initCmd.Flags().StringVar(&initMachineName, "name", "", "Machine name (default: 'machine')")
+	initCmd.Flags().StringVar(&initFleetName, "fleet", "dev", "Fleet name (default: 'dev')")
 	rootCmd.AddCommand(initCmd)
 }

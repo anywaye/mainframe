@@ -67,6 +67,9 @@ my-mainframe/
 ├── bin/                   # Custom scripts (optional)
 ├── os/                    # OS-specific settings (optional)
 ├── os.sh                  # OS-conditional settings (optional)
+├── fleet/                 # Machine fleet definitions (optional)
+│   ├── dev.yml            # Development machines
+│   └── prod.yml           # Production servers
 ├── .env.template          # Environment variables (no values)
 ├── sandbox.yml            # Sandbox spec
 ├── Dockerfile             # Container image
@@ -100,6 +103,21 @@ Every directory is optional. The framework applies what's there, skips what's no
 |---|---|
 | `mf new [name]` | Create a new config repo |
 | `mf init <url>` | Clone an existing config repo |
+
+### Fleet (machine groups)
+| Command | Description |
+|---|---|
+| `mf fleet create <name>` | Create a new fleet |
+| `mf fleet create <name> --boax` | Create a fleet with boax pool registration |
+| `mf fleet list` | List all fleets |
+| `mf fleet show <name>` | Show fleet details and machines |
+| `mf fleet add <fleet> <name>` | Add a machine to a fleet |
+| `mf fleet remove <fleet> <name>` | Remove a machine from a fleet |
+| `mf fleet apply <fleet>` | Apply config to all machines in a fleet |
+| `mf fleet sync <fleet>` | Sync config across all machines in a fleet |
+| `mf fleet status <fleet>` | Show health status of fleet machines |
+| `mf fleet diff <fleet>` | Compare all machines in a fleet vs config |
+| `mf fleet register-boax <fleet>` | Register fleet machines as boax pools |
 
 ### Security & SSH
 | Command | Description |

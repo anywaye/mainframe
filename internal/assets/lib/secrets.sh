@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# Bitwarden CLI setup for secret management (optional)
+# Generic secrets management dispatcher.
+# Sources the appropriate backend module based on SECRETS_BACKEND.
+# Supported backends: bitwarden, 1password, infisical, env
 set -euo pipefail
 
-BW_EMAIL="${BW_EMAIL:-}"
+SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
 
-if [ -z "$BW_EMAIL" ]; then
-  echo "[secrets] BW_EMAIL not set. Skipping Bitwarden setup."
-  echo "[secrets] To use Bitwarden: export BW_EMAIL=your@email.com and re-run."
-  exit 0
+# Source the backend module
+_backend_module="$(dirname "${BASH_SOURCE[0]}")/secrets/${SECRETS_BACKEND}.sh"
+if [ -f "$_backend_module" ]; then
+  source "$_backend_module"
+else
+  echo "[secrets] Backend '$_SECRETS_BACKEND' not supported. Available: bitwarden, 1password, infisical, env" >&2
+  # Fall back to env backend
+  source "$(dirname "${BASH_SOURCE[0]}")/secrets/env.sh"
 fi
 
-if ! command -v bw &>/dev/null; then
-  npm install -g @bitwarden/cli 2>&1 | tail -1
-fi
-
-echo "[secrets] Bitwarden CLI: $(bw --version 2>/dev/null)"
-echo "[secrets] Configure with: bw login $BW_EMAIL"
-echo "[secrets] Then: export BW_SESSION=\$(bw unlock --raw)"
+# Generic interface (implemented by each backend):
+#   secrets_available()  - returns 0 if backend CLI is installed
+#   secrets_status()     - prints: unauthenticated, locked, unlocked
+#   secrets_get_note(name) - prints the note content of an item
+#   secrets_get_field(name, field) - prints a specific field value

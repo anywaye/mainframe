@@ -100,50 +100,64 @@ func applySSHKeys(dryRun bool) {
 		return
 	}
 	runShellStep("fetch ssh keys", `
-		if command -v bw &>/dev/null; then
-			if timeout 5 bw status 2>/dev/null | grep -q '"status":"unauthenticated"'; then
-				echo "  Bitwarden not logged in. Skipping SSH key fetch."
-				echo "  Run 'bw login <email>' to enable SSH key management."
-			elif timeout 5 bw status 2>/dev/null | grep -q '"status":"locked"'; then
-				echo "  Vault is locked. Run 'bw unlock' to unlock."
-			elif timeout 5 bw status 2>/dev/null | grep -q '"status":"unlocked"'; then
-				echo "  Vault is unlocked. Fetching SSH keys..."
-				# Fetch SSH keys referenced in mainframe.yml
-				# Keys are stored as secure notes in Bitwarden
-				for item_name in "GitHub SSH Key" "dev-mf SSH Key"; do
-					key_path=""
-					case "$item_name" in
-						"GitHub SSH Key") key_path="$HOME/.ssh/id_ed25519" ;;
-						"dev-mf SSH Key") key_path="$HOME/.ssh/dev-mf" ;;
-					esac
-					if [ -n "$key_path" ] && [ ! -f "$key_path" ]; then
-						echo "  Fetching: $item_name → $key_path"
-						bw get item "$item_name" 2>/dev/null | python3 -c "
-import json, sys, re
-data = json.load(sys.stdin)
-notes = data.get('notes', '')
-# Extract private key from notes
+		# Source secrets backend
+		SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
+		_backend=""
+		for _p in "lib/secrets.sh" "$MAINFRAME_LIB/secrets.sh" "/usr/local/lib/mainframe/lib/secrets.sh"; do
+			if [ -f "$_p" ]; then _backend="$_p"; break; fi
+		done
+		if [ -n "$_backend" ]; then source "$_backend"; fi
+
+		if ! type secrets_available &>/dev/null || ! secrets_available 2>/dev/null; then
+			echo "  Secrets backend '$SECRETS_BACKEND' not available. Skipping."
+			echo "  Install the backend CLI or set SECRETS_BACKEND=env"
+			return 0
+		fi
+
+		status=$(secrets_status 2>/dev/null || echo "unknown")
+		echo "  Secrets backend: $SECRETS_BACKEND (status: $status)"
+
+		if [ "$status" = "unauthenticated" ]; then
+			echo "  Not authenticated. Skipping SSH key fetch."
+			echo "  Run 'bw login <email>' to enable."
+			return 0
+		fi
+
+		if [ "$status" = "locked" ]; then
+			echo "  Vault is locked. Run 'bw unlock' to unlock."
+			return 0
+		fi
+
+		if [ "$status" = "unlocked" ]; then
+			echo "  Vault is unlocked. Fetching SSH keys..."
+			for item_name in "GitHub SSH Key" "dev-mf SSH Key"; do
+				key_path=""
+				case "$item_name" in
+					"GitHub SSH Key") key_path="$HOME/.ssh/id_ed25519" ;;
+					"dev-mf SSH Key") key_path="$HOME/.ssh/dev-mf" ;;
+				esac
+				if [ -n "$key_path" ] && [ ! -f "$key_path" ]; then
+					echo "  Fetching: $item_name -> $key_path"
+					secrets_get_note "$item_name" 2>/dev/null | python3 -c "
+import sys, re
+notes = sys.stdin.read()
 match = re.search(r'-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----', notes, re.DOTALL)
 if match:
-    key = match.group(0)
     with open('$key_path', 'w') as f:
-        f.write(key + '\n')
+        f.write(match.group(0) + chr(10))
     print('  Written to $key_path')
 else:
     print('  No private key found in notes')
 " 2>/dev/null
-						if [ -f "$key_path" ]; then
-							chmod 600 "$key_path"
-							echo "  Permissions set: 600"
-						fi
-					else
-						echo "  $key_path already exists. Skipping."
+					if [ -f "$key_path" ]; then
+						chmod 600 "$key_path"
+						echo "  Permissions set: 600"
 					fi
-				done
-				echo "  SSH key fetch complete"
-			fi
-		else
-			echo "  Bitwarden CLI not found. Skipping SSH key fetch."
+				else
+					echo "  $key_path already exists. Skipping."
+				fi
+			done
+			echo "  SSH key fetch complete"
 		fi
 	`)
 }

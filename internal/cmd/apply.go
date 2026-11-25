@@ -174,6 +174,8 @@ List available steps:
 		os.Chdir(configDir)
 		defer os.Chdir(origDir)
 
+		os.Setenv("MAINFRAME_LIB", tmpDir)
+
 		fmt.Printf("=== Applying mainframe config from %s ===\n", configDir)
 		if applyDryRun {
 			fmt.Println("[DRY RUN - no changes will be made]")

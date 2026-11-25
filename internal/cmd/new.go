@@ -58,6 +58,7 @@ var newCmd = &cobra.Command{
 			dir + "/mcp/config.json":        mcpConfig,
 			dir + "/sandbox.yml":            sandboxYML,
 			dir + "/os.sh":                  osSh,
+			dir + "/os/darwin.sh":           darwinDefaults,
 			dir + "/shell/zsh/zshrc":        zshrcTemplate,
 			dir + "/git/gitconfig":          gitconfigTemplate,
 			dir + "/ssh/config":             sshConfigTemplate,
@@ -311,6 +312,33 @@ const osSh = `# os.sh - OS-specific settings (optional)
 # if [[ "$(uname)" == "Linux" ]]; then
 #   sysctl -w net.ipv4.ip_forward=1
 # fi
+`
+
+const darwinDefaults = `#!/usr/bin/env bash
+# macOS defaults - sourced by mf apply on macOS only
+# Uncomment and customize the settings you want
+
+# Finder: show all filename extensions
+# defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+
+# Show hidden files by default
+# defaults write com.apple.Finder AppleShowAllFiles -bool false
+
+# Expand save dialog by default
+# defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
+
+# Show the ~/Library folder in Finder
+# chflags nohidden ~/Library
+
+# Enable full keyboard access for all controls
+# defaults write NSGlobalDomain AppleKeyboardUIMode -int 3
+
+# Enable tap to click (Trackpad)
+# defaults write com.apple.driver.AppleBluetoothMultitouch.trackpad Clicking -bool true
+
+# Set a blazingly fast keyboard repeat rate
+# defaults write NSGlobalDomain KeyRepeat -int 1
+# defaults write NSGlobalDomain InitialKeyRepeat -int 10
 `
 
 const zshrcTemplate = `# Shell configuration managed by mainframe

@@ -3,6 +3,14 @@
 # Source this before sourcing any os/*.sh module.
 
 detect_os() {
+  if [ "$(uname -s)" = "Darwin" ]; then
+    OS_ID="macos"
+    OS_VERSION="$(sw_vers -productVersion)"
+    OS_FAMILY="darwin"
+    echo "[detect] OS: macOS $OS_VERSION (family: darwin)"
+    return 0
+  fi
+
   if [ ! -f /etc/os-release ]; then
     echo "ERROR: /etc/os-release not found. Unsupported OS." >&2
     exit 1
@@ -26,6 +34,14 @@ detect_os() {
       OS_FAMILY="alpine"
       ;;
     *)
+      # Check for macOS
+      if [ "$(uname -s)" = "Darwin" ]; then
+        OS_FAMILY="darwin"
+        OS_ID="macos"
+        OS_VERSION="$(sw_vers -productVersion)"
+        echo "[detect] OS: macOS $OS_VERSION (family: darwin)"
+        return 0 2>/dev/null || true
+      fi
       echo "ERROR: Unsupported OS: $OS_ID ($OS_VERSION)" >&2
       echo "Supported: Debian, Ubuntu, Fedora, RHEL, CentOS, Rocky, Alma, Arch, Manjaro, Alpine" >&2
       exit 1

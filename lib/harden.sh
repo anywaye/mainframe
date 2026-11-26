@@ -86,7 +86,7 @@ if [ -f /etc/ssh/sshd_config.d/00-recovery.conf ]; then
   echo "[harden] Removing recovery config (from previous mf recover)..."
   rm -f /etc/ssh/sshd_config.d/00-recovery.conf
 fi
-EXISTING_SSH_CONFIGS=$(ls /etc/ssh/sshd_config.d/*.conf 2>/dev/null | grep -v "00-mainframe.conf" | grep -v "50-cloud-init.conf" || true)
+EXISTING_SSH_CONFIGS=$(ls /etc/ssh/sshd_config.d/*.conf 2>/dev/null | grep -v "00-mainframe.conf" | grep -v "50-cloud-init.conf" | grep -v "60-cloudimg-settings.conf" | grep -v "00-recovery.conf" || true)
 if [ -n "$EXISTING_SSH_CONFIGS" ] && [ "$FORCE_SSH" != "true" ]; then
   echo "[harden] Existing SSH config found:"
   for f in $EXISTING_SSH_CONFIGS; do echo "  $f"; done
@@ -159,6 +159,15 @@ if [ -n "${ALLOW_DB_FROM:-}" ]; then
   if command -v ufw &>/dev/null; then
     ufw allow from "$ALLOW_DB_FROM" to any port 5432 proto tcp comment "PostgreSQL" 2>/dev/null || true
     ufw allow from "$ALLOW_DB_FROM" to any port 6432 proto tcp comment "PgBouncer" 2>/dev/null || true
+  fi
+fi
+
+# Re-enable firewall if it was disabled by mf recover
+if command -v ufw &>/dev/null; then
+  if ! ufw status 2>/dev/null | grep -q "Status: active"; then
+    echo "[harden] Firewall is inactive. Re-enabling..."
+    ufw --force enable 2>/dev/null || true
+    echo "[harden] Firewall enabled"
   fi
 fi
 

@@ -110,36 +110,41 @@ func applySSHKeys(dryRun bool) {
 
 		if ! type secrets_available &>/dev/null || ! secrets_available 2>/dev/null; then
 			echo "  Secrets backend '$SECRETS_BACKEND' not available. Skipping."
-			echo "  Install the backend CLI or set SECRETS_BACKEND=env"
 			return 0
 		fi
 
 		status=$(secrets_status 2>/dev/null || echo "unknown")
 		echo "  Secrets backend: $SECRETS_BACKEND (status: $status)"
 
-		if [ "$status" = "unauthenticated" ]; then
-			echo "  Not authenticated. Skipping SSH key fetch."
-			echo "  Run 'bw login <email>' to enable."
+		if [ "$status" = "unauthenticated" ] || [ "$status" = "locked" ]; then
+			echo "  Vault not accessible ($status). Skipping SSH key fetch."
 			return 0
 		fi
 
-		if [ "$status" = "locked" ]; then
-			echo "  Vault is locked. Run 'bw unlock' to unlock."
+		# Read SSH keys from config (ssh/keys.conf or mainframe.yml)
+		keys_conf="ssh/keys.conf"
+		if [ ! -f "$keys_conf" ]; then
+			echo "  No ssh/keys.conf found. Skipping SSH key fetch."
+			echo "  Create ssh/keys.conf with: <bitwarden_item_name>:<path>"
 			return 0
 		fi
 
-		if [ "$status" = "unlocked" ]; then
-			echo "  Vault is unlocked. Fetching SSH keys..."
-			for item_name in "GitHub SSH Key" "dev-mf SSH Key" "app-mf SSH Key"; do
-				key_path=""
-				case "$item_name" in
-					"GitHub SSH Key") key_path="$HOME/.ssh/id_ed25519" ;;
-					"dev-mf SSH Key") key_path="$HOME/.ssh/dev-mf" ;;
-					"app-mf SSH Key") key_path="$HOME/.ssh/app-mf" ;;
-				esac
-				if [ -n "$key_path" ] && [ ! -f "$key_path" ]; then
-					echo "  Fetching: $item_name -> $key_path"
-					secrets_get_note "$item_name" 2>/dev/null | python3 -c "
+		echo "  Fetching SSH keys from $keys_conf..."
+		while IFS= read -r line; do
+			line="${line%%#*}"
+			line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+			[ -z "$line" ] && continue
+			item_name="${line%%:*}"
+			key_path="${line#*:}"
+			# Expand ~
+			key_path="${key_path/#\~/$HOME}"
+			if [ -f "$key_path" ]; then
+				echo "  $key_path already exists. Skipping."
+				continue
+			fi
+			echo "  Fetching: $item_name -> $key_path"
+			mkdir -p "$(dirname "$key_path")"
+			secrets_get_note "$item_name" 2>/dev/null | python3 -c "
 import sys, re
 notes = sys.stdin.read()
 match = re.search(r'-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----', notes, re.DOTALL)
@@ -150,16 +155,12 @@ if match:
 else:
     print('  No private key found in notes')
 " 2>/dev/null
-					if [ -f "$key_path" ]; then
-						chmod 600 "$key_path"
-						echo "  Permissions set: 600"
-					fi
-				else
-					echo "  $key_path already exists. Skipping."
-				fi
-			done
-			echo "  SSH key fetch complete"
-		fi
+			if [ -f "$key_path" ]; then
+				chmod 600 "$key_path"
+				echo "  Permissions set: 600"
+			fi
+		done < "$keys_conf"
+		echo "  SSH key fetch complete"
 	`)
 }
 

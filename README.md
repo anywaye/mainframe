@@ -17,7 +17,7 @@ cd my-mainframe
 mf apply
 
 # Or clone an existing config repo
-mf init https://github.com/kaka-ruto/mainframe.git
+mf init https://github.com/your-org/mainframe.git
 mf apply
 ```
 

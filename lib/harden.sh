@@ -3,7 +3,14 @@
 # Applies a solid security baseline. Optional extras are env-gated.
 # Assets (config templates) are in assets/. Copy, fill placeholders, validate, apply.
 set -uo pipefail
-# Non-fatal mode: individual steps can fail without aborting
+# Non-fatal mode
+
+# Persistent logging
+HARDEN_LOG="/var/log/mainframe-harden.log"
+exec > >(tee -a "$HARDEN_LOG") 2>&1
+echo "=== Hardening started at $(date) ==="
+echo "Sections: ${HARDEN_SECTIONS:-all}"
+: individual steps can fail without aborting
 HARDEN_ERRORS=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -351,6 +358,7 @@ if [ -d /etc/.git ]; then
 fi
 
 # Run audit after hardening
+if should_run "audit"; then
 echo ""
 echo "[harden] Running audit (post-hardening)..."
 if [ -f "$AUDIT_DIR/audit.sh" ]; then
@@ -366,6 +374,8 @@ if command -v lynis &>/dev/null; then
     LYNIS_AFTER=$(grep -oP '^hardening_index=\K[0-9]+' "$logfile" 2>/dev/null || echo "0")
     echo "[harden] Lynis score: ${LYNIS_BEFORE:-?} -> $LYNIS_AFTER"
   fi
+fi
+
 fi
 
 echo "[harden] Done. Review audit output above."

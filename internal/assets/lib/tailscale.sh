@@ -23,7 +23,7 @@ done
 
 # Retry tailscale up
 for i in $(seq 1 3); do
-  if tailscale up --authkey="$TAILSCALE_AUTHKEY" 2>&1; then
+  if tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh=false 2>&1; then
     break
   fi
   echo "[tailscale] Retry $i/3..."
@@ -76,9 +76,9 @@ fi
 if ! tailscale status >/dev/null 2>&1; then
   logger -t tailscale-watchdog "Tailscale not connected, re-authenticating..."
   if [ -n "$AUTHKEY" ]; then
-    tailscale up --authkey="$AUTHKEY" 2>/dev/null || true
+    tailscale up --authkey="$AUTHKEY" --ssh=false 2>/dev/null || true
   else
-    tailscale up 2>/dev/null || true
+    tailscale up --ssh=false 2>/dev/null || true
   fi
   sleep 5
 fi
@@ -92,7 +92,7 @@ fi
 EOF
 chmod +x /usr/local/bin/tailscale-watchdog
 # Tailscale keep-alive: prevent connection drops
-tailscale up --snat-subnet-routes=false --accept-routes 2>/dev/null || true
+tailscale up --snat-subnet-routes=false --accept-routes --ssh=false 2>/dev/null || true
 echo "[tailscale] Keep-alive configured (snat-subnet-routes=false, accept-routes)"
 
 echo "[tailscale] Watchdog script installed (systemd timer runs every 5 min)"

@@ -82,15 +82,6 @@ func chatsPullCmd() *cobra.Command {
 				}
 
 				fmt.Printf("  %s (%s): pulling chats...\n", m.Name, m.Host)
-				// Run mf chats pull on the remote machine via SSH, then rsync results
-				// For now, use SSH to trigger pull on remote and rsync back
-				remoteCmd := exec.Command("ssh", "-o", "ConnectTimeout=10", m.Host,
-					"cd ~/.mainframe 2>/dev/null || cd ~/mainframe 2>/dev/null; mf chats pull --local-only 2>/dev/null; echo 'PULL_DONE'")
-				remoteCmd.Stdout = os.Stdout
-				remoteCmd.Stderr = os.Stderr
-				if err := remoteCmd.Run(); err != nil {
-					fmt.Printf("  Warning: remote pull failed on %s: %v\n", m.Name, err)
-				}
 
 				// Pull chat data from remote via rsync
 				home, _ := os.UserHomeDir()
@@ -122,9 +113,6 @@ func chatsPullCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&fleetName, "fleet", "", "Fleet name (default: dev)")
-	// Hidden flag for remote machines to pull only local data
-	cmd.Flags().Bool("local-only", false, "Only pull from local state (used by remote machines)")
-	cmd.Flags().MarkHidden("local-only")
 	return cmd
 }
 

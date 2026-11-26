@@ -318,9 +318,18 @@ func applyChatsConfig(dryRun bool) {
 	runShellStep("install minio", `
 		if command -v minio &>/dev/null; then
 			echo "  MinIO: already installed ($(minio --version 2>&1 | head -1))"
+		elif command -v apt-get &>/dev/null; then
+			echo "  Installing MinIO via apt..."
+			# MinIO provides .deb packages
+			arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+			curl -fsSL "https://dl.min.io/server/minio/release/linux-${arch}/minio" -o /usr/local/bin/minio 2>/dev/null || \
+			wget -q "https://dl.min.io/server/minio/release/linux-${arch}/minio" -O /usr/local/bin/minio 2>/dev/null || \
+			echo "  Warning: MinIO binary download failed. Install manually from https://min.io/download"
+			chmod +x /usr/local/bin/minio 2>/dev/null || true
+			echo "  MinIO installed (or download manually)"
 		elif command -v brew &>/dev/null; then
 			echo "  Installing MinIO via Homebrew..."
-			brew install minio/stable/minio 2>&1 | tail -2
+			brew install minio 2>&1 | tail -2
 		else
 			echo "  Installing MinIO binary..."
 			arch=$(uname -m)
@@ -339,6 +348,16 @@ func applyChatsConfig(dryRun bool) {
 	runShellStep("install litestream", `
 		if command -v litestream &>/dev/null; then
 			echo "  Litestream: already installed ($(litestream version 2>&1 | head -1))"
+		elif command -v apt-get &>/dev/null; then
+			echo "  Installing Litestream via binary download..."
+			arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+			case "$arch" in
+				arm64) arch="arm64" ;;
+				amd64) arch="amd64" ;;
+			esac
+			curl -fsSL "https://github.com/benbjohnson/litestream/releases/latest/download/litestream-linux-${arch}.tar.gz" -o /tmp/litestream.tar.gz && tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream
+			chmod +x /usr/local/bin/litestream
+			echo "  Litestream installed"
 		elif command -v brew &>/dev/null; then
 			echo "  Installing Litestream via Homebrew..."
 			brew install litestream 2>&1 | tail -2
@@ -350,7 +369,7 @@ func applyChatsConfig(dryRun bool) {
 				x86_64) arch="amd64" ;;
 			esac
 			os_name=$(uname -s | tr '[:upper:]' '[:lower:]')
-			curl -fsSL "https://github.com/benbjohnson/litestream/releases/latest/download/litestream-${os_name}-${arch}.tar.gz" | tar xz -C /usr/local/bin litestream
+			curl -fsSL "https://github.com/benbjohnson/litestream/releases/latest/download/litestream-${os_name}-${arch}.tar.gz" -o /tmp/litestream.tar.gz && tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream
 			chmod +x /usr/local/bin/litestream
 			echo "  Litestream installed"
 		fi
@@ -360,6 +379,18 @@ func applyChatsConfig(dryRun bool) {
 	runShellStep("install mc", `
 		if command -v mc &>/dev/null; then
 			echo "  mc: already installed"
+		elif command -v apt-get &>/dev/null; then
+			echo "  Installing mc via binary download..."
+			arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+			case "$arch" in
+				arm64) arch="arm64" ;;
+				amd64) arch="amd64" ;;
+			esac
+			curl -fsSL "https://dl.min.io/client/mc/release/linux-${arch}/mc" -o /usr/local/bin/mc 2>/dev/null || \
+			wget -q "https://dl.min.io/client/mc/release/linux-${arch}/mc" -O /usr/local/bin/mc 2>/dev/null || \
+			echo "  Warning: mc binary download failed. Install manually from https://min.io/download"
+			chmod +x /usr/local/bin/mc 2>/dev/null || true
+			echo "  mc installed (or download manually)"
 		elif command -v brew &>/dev/null; then
 			echo "  Installing mc via Homebrew..."
 			brew install minio/stable/mc 2>&1 | tail -2
@@ -428,8 +459,16 @@ func applyChatsConfig(dryRun bool) {
 			else
 				echo "  No LaunchAgent plist found. Skipping."
 			fi
+		elif [ -f /etc/systemd/system/mainframe-chats-sync.service ] || [ -f "storage/systemd/mainframe-chats-sync.service" ]; then
+			if [ -f "storage/systemd/mainframe-chats-sync.service" ]; then
+				cp "storage/systemd/mainframe-chats-sync.service" /etc/systemd/system/mainframe-chats-sync.service
+				systemctl daemon-reload
+				systemctl enable mainframe-chats-sync
+				echo "  systemd service installed and enabled"
+				echo "  Start with: systemctl start mainframe-chats-sync"
+			fi
 		else
-			echo "  Non-macOS: sync daemon setup skipped (use systemd manually)"
+			echo "  No sync daemon config found for this OS. Skipping."
 		fi
 	`)
 

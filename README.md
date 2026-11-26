@@ -138,6 +138,21 @@ Every directory is optional. The framework applies what's there, skips what's no
 | `mf fleet diff <fleet>` | Compare all machines in a fleet vs config |
 | `mf fleet diff <fleet>` | Compare all machines in a fleet vs config |
 
+### Chat sync (agent conversations)
+| Command | Description |
+|---|---|
+| `mf chats pull [fleet]` | Pull chat sessions from all reachable fleet machines (idempotent) |
+| `mf chats push [fleet]` | Push local chat sessions to all reachable fleet machines |
+| `mf chats status [fleet]` | Show chat sync status per machine |
+| `mf chats list` | List all chat sessions across agents (ZCode, OpenCode) |
+| `mf chats daemon start` | Start the chat sync daemon (MinIO + Litestream) |
+| `mf chats daemon stop` | Stop the chat sync daemon |
+| `mf chats daemon status` | Show daemon status |
+
+Chat sync is peer-to-peer: every machine is a full replica. No single point of failure.
+Uses MinIO for storage and Litestream for real-time SQLite replication.
+Supported agents: ZCode, OpenCode (extensible to others).
+
 ### Security & SSH
 | Command | Description |
 |---|---|

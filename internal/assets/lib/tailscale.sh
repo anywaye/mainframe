@@ -13,6 +13,11 @@ if ! command -v tailscale &>/dev/null; then
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 
+# Explicitly disable Tailscale SSH (use OpenSSH directly over Tailscale network)
+# Tailscale SSH intercepts port 22 and creates a single point of failure
+tailscale set --ssh=false 2>/dev/null || true
+echo "[tailscale] Tailscale SSH disabled (using OpenSSH directly)"
+
 # Wait for tailscaled to be ready
 for i in $(seq 1 10); do
   if tailscale status >/dev/null 2>&1 || [ "$(tailscale status 2>&1 | head -1)" != "" ]; then

@@ -47,6 +47,7 @@ func allSteps() []stepFunc {
 		{"ssh", "Sync SSH configuration", applySSHConfig},
 		{"secrets", "Unlock secrets vault and store session", applySecrets},
 		{"ssh-keys", "Fetch SSH keys from password manager", applySSHKeys},
+		{"gpg-keys", "Fetch GPG keys from password manager", applyGPGKeys},
 		{"mcp", "Sync MCP configuration", applyMCPConfig},
 		{"skills", "Sync AI agent skills", applySkills},
 		{"bin", "Sync bin scripts", applyBinScripts},

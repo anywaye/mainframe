@@ -30,6 +30,16 @@ HARDEN_FAIL2BAN="${HARDEN_FAIL2BAN:-true}"
 
 # Optional extras (all false unless explicitly enabled)
 HARDEN_FIDO2="${HARDEN_FIDO2:-false}"
+
+# Selective hardening: HARDEN_SECTIONS env var (comma-separated)
+# If empty, run all sections. If set, run only those sections.
+should_run() {
+  local section="$1"
+  if [ -z "${HARDEN_SECTIONS:-}" ]; then
+    return 0  # run all
+  fi
+  echo ",$HARDEN_SECTIONS," | grep -q ",$section,"
+}
 HARDEN_TOTP="${HARDEN_TOTP:-false}"
 HARDEN_VPN_ONLY="${HARDEN_VPN_ONLY:-false}"
 HARDEN_AUDITD="${HARDEN_AUDITD:-false}"
@@ -37,6 +47,7 @@ HARDEN_AIDE="${HARDEN_AIDE:-false}"
 HARDEN_NOEXEC_SHM="${HARDEN_NOEXEC_SHM:-false}"
 HARDEN_CORE_DUMPS="${HARDEN_CORE_DUMPS:-false}"
 
+if should_run "audit"; then
 echo "[harden] Running audit (read-only, baseline)..."
 if [ -f "$AUDIT_DIR/audit.sh" ]; then
   bash "$AUDIT_DIR/audit.sh" 2>&1 | tail -3 || true
@@ -95,8 +106,10 @@ if [ -n "$EXISTING_SSH_CONFIGS" ] && [ "$FORCE_SSH" != "true" ]; then
   HARDEN_SSH_CRYPTO="false"
 fi
 
+fi
+
 # 1. SSH hardening (sane defaults, idempotent)
-if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
+if should_run "ssh" && [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
   if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ] && grep -q "PermitRootLogin no" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null; then
     echo "[harden] SSH hardening already applied, skipping"
   else
@@ -127,7 +140,7 @@ if [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
 fi
 
 # 1b. Docker daemon hardening (idempotent)
-if command -v docker &>/dev/null; then
+if should_run "docker" && command -v docker &>/dev/null; then
   cfg=/etc/docker/daemon.json
   if [ -f "$cfg" ] && grep -q '"icc": false' "$cfg" 2>/dev/null && grep -q '"log-opts"' "$cfg" 2>/dev/null; then
     echo "[harden] Docker daemon already hardened, skipping"
@@ -148,13 +161,13 @@ DEOF
 fi
 
 # 1c. telnet removal
-if dpkg -l inetutils-telnet 2>/dev/null | grep -q "^ii"; then
+if should_run "ssh" && dpkg -l inetutils-telnet 2>/dev/null | grep -q "^ii"; then
   echo "[harden] Removing telnet..."
   apt purge -y -qq inetutils-telnet 2>/dev/null || true
 fi
 
 # 1d. DB port allowlisting (optional)
-if [ -n "${ALLOW_DB_FROM:-}" ]; then
+if should_run "firewall" && [ -n "${ALLOW_DB_FROM:-}" ]; then
   echo "[harden] Allowing DB ports from $ALLOW_DB_FROM..."
   if command -v ufw &>/dev/null; then
     ufw allow from "$ALLOW_DB_FROM" to any port 5432 proto tcp comment "PostgreSQL" 2>/dev/null || true
@@ -163,7 +176,7 @@ if [ -n "${ALLOW_DB_FROM:-}" ]; then
 fi
 
 # Re-enable firewall if it was disabled by mf recover
-if command -v ufw &>/dev/null; then
+if should_run "firewall" && command -v ufw &>/dev/null; then
   if ! ufw status 2>/dev/null | grep -q "Status: active"; then
     echo "[harden] Firewall is inactive. Re-enabling..."
     ufw --force enable 2>/dev/null || true
@@ -172,7 +185,7 @@ if command -v ufw &>/dev/null; then
 fi
 
 # 2. Sysctl (sane defaults)
-if [ "$HARDEN_BBR" = "true" ]; then
+if should_run "sysctl" && [ "$HARDEN_BBR" = "true" ]; then
   echo "[harden] Applying sysctl (including BBR)..."
   mkdir -p /etc/sysctl.d 2>/dev/null || true
   cp "$ASSETS_DIR/sysctl/99-mainframe.conf" /etc/sysctl.d/99-mainframe.conf 2>/dev/null || echo "[harden] sysctl dir not available (non-Linux?)"
@@ -190,7 +203,7 @@ if [ "$HARDEN_BBR" = "true" ]; then
 fi
 
 # 3. Journald limits
-if [ "$HARDEN_JOURNALD" = "true" ]; then
+if should_run "journald" && [ "$HARDEN_JOURNALD" = "true" ]; then
   echo "[harden] Applying journald limits..."
   mkdir -p /etc/systemd/journald.conf.d 2>/dev/null || true
   cp "$ASSETS_DIR/journald/10-mainframe.conf" /etc/systemd/journald.conf.d/10-mainframe.conf 2>/dev/null || echo "[harden] journald not available (non-Linux?)"
@@ -198,7 +211,7 @@ if [ "$HARDEN_JOURNALD" = "true" ]; then
 fi
 
 # 4. Unattended upgrades
-if [ "$HARDEN_UNATTENDED" = "true" ]; then
+if should_run "unattended" && [ "$HARDEN_UNATTENDED" = "true" ]; then
   echo "[harden] Enabling unattended security updates..."
   apt-get install -y -qq unattended-upgrades 2>&1 | tail -1 || true
   cp "$ASSETS_DIR/apt/20auto-upgrades" /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null || true
@@ -206,7 +219,7 @@ if [ "$HARDEN_UNATTENDED" = "true" ]; then
 fi
 
 # 5. Needrestart
-if [ "$HARDEN_NEEDRESTART" = "true" ]; then
+if should_run "needrestart" && [ "$HARDEN_NEEDRESTART" = "true" ]; then
   echo "[harden] Configuring needrestart..."
   apt-get install -y -qq needrestart 2>&1 | tail -1 || true
   mkdir -p /etc/needrestart/conf.d 2>/dev/null || true
@@ -214,7 +227,7 @@ if [ "$HARDEN_NEEDRESTART" = "true" ]; then
 fi
 
 # 6. Swap
-if [ "$HARDEN_SWAP" = "true" ]; then
+if should_run "swap" && [ "$HARDEN_SWAP" = "true" ]; then
   if [ ! -f /swapfile ]; then
     echo "[harden] Creating 2GB swap file..."
     fallocate -l 2G /swapfile 2>/dev/null && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab || echo "[harden] Swap creation skipped (non-Linux?)"
@@ -224,7 +237,7 @@ if [ "$HARDEN_SWAP" = "true" ]; then
 fi
 
 # 7. etckeeper
-if [ "$HARDEN_ETCKEEPER" = "true" ]; then
+if should_run "etckeeper" && [ "$HARDEN_ETCKEEPER" = "true" ]; then
   apt-get install -y -qq etckeeper 2>&1 | tail -1 || true
   if [ ! -d /etc/.git ]; then
     etckeeper init 2>&1 | tail -1 || true
@@ -233,7 +246,7 @@ if [ "$HARDEN_ETCKEEPER" = "true" ]; then
 fi
 
 # 8. Deadman switch
-if [ "$HARDEN_DEADMAN" = "true" ]; then
+if should_run "deadman" && [ "$HARDEN_DEADMAN" = "true" ]; then
   if [ -f "$AUDIT_DIR/deadman.sh" ]; then
     install -m 755 "$AUDIT_DIR/deadman.sh" /usr/local/sbin/mainframe-deadman 2>/dev/null || true
     echo "[harden] Deadman installed"
@@ -241,7 +254,7 @@ if [ "$HARDEN_DEADMAN" = "true" ]; then
 fi
 
 # 9. fail2ban
-if [ "$HARDEN_FAIL2BAN" = "true" ]; then
+if should_run "fail2ban" && [ "$HARDEN_FAIL2BAN" = "true" ]; then
   apt-get install -y -qq fail2ban 2>&1 | tail -1 || true
   mkdir -p /etc/fail2ban/jail.d 2>/dev/null || true
   # Determine admin IP from SSH connection
@@ -292,7 +305,7 @@ if [ "$HARDEN_CORE_DUMPS" = "true" ]; then
 fi
 
 # Tailscale deadman: restart tailscale if it crashes
-if command -v tailscale &>/dev/null; then
+if should_run "tailscale" && command -v tailscale &>/dev/null; then
   cat > /etc/systemd/system/mainframe-tailscale-watchdog.service << 'SVC'
 [Unit]
 Description=Mainframe Tailscale watchdog
@@ -320,7 +333,7 @@ TIMER
 fi
 
 # Crash prevention (memory, disk, CPU, process protection)
-if [ -f "$SCRIPT_DIR/crash-prevention.sh" ]; then
+if should_run "crash-prevention" && [ -f "$SCRIPT_DIR/crash-prevention.sh" ]; then
   echo "[harden] Applying crash prevention..."
   bash "$SCRIPT_DIR/crash-prevention.sh" 2>&1 | tail -5
 fi

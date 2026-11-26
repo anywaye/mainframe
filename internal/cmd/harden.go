@@ -15,6 +15,7 @@ import (
 var hardenSections string
 var hardenList bool
 var hardenForce bool
+var hardenSkipAudit bool
 
 var hardenCmd = &cobra.Command{
 	Use:   "harden [sections...]",
@@ -75,6 +76,9 @@ Skip the audit baseline:
 
 		c := exec.Command("bash", hardenPath)
 		c.Env = append(os.Environ(), "HARDEN_SECTIONS="+sections)
+		if hardenSkipAudit {
+			c.Env = append(c.Env, "SKIP_AUDIT=true")
+		}
 		if hardenForce {
 			c.Env = append(c.Env, "FORCE_SSH=true")
 		}
@@ -116,5 +120,6 @@ func init() {
 	hardenCmd.Flags().StringVar(&hardenSections, "sections", "", "Comma-separated sections to run (or pass as args)")
 	hardenCmd.Flags().BoolVar(&hardenList, "list", false, "List available sections")
 	hardenCmd.Flags().BoolVar(&hardenForce, "force", false, "Force SSH hardening even if existing config found")
+	hardenCmd.Flags().BoolVar(&hardenSkipAudit, "skip-audit", false, "Skip the Lynis audit (faster)")
 	rootCmd.AddCommand(hardenCmd)
 }

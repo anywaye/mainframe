@@ -54,7 +54,7 @@ HARDEN_AIDE="${HARDEN_AIDE:-false}"
 HARDEN_NOEXEC_SHM="${HARDEN_NOEXEC_SHM:-false}"
 HARDEN_CORE_DUMPS="${HARDEN_CORE_DUMPS:-false}"
 
-if should_run "audit"; then
+if should_run "audit" && [ "${SKIP_AUDIT:-false}" != "true" ]; then
 echo "[harden] Running audit (read-only, baseline)..."
 if [ -f "$AUDIT_DIR/audit.sh" ]; then
   bash "$AUDIT_DIR/audit.sh" 2>&1 | tail -3 || true
@@ -121,8 +121,25 @@ if should_run "ssh" && [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
     echo "[harden] SSH hardening already applied, skipping"
   else
     echo "[harden] Applying SSH hardening..."
+    # Backup current SSH config before changes
     mkdir -p /etc/ssh/sshd_config.d 2>/dev/null || true
-    cp "$ASSETS_DIR/ssh/00-mainframe.conf" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null || echo "[harden] SSH config dir not found (non-Linux?)"
+    if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ]; then
+      cp /etc/ssh/sshd_config.d/00-mainframe.conf /etc/ssh/sshd_config.d/00-mainframe.conf.bak 2>/dev/null || true
+    fi
+    # Write to temp file first, validate, then move
+    tmp_conf="/etc/ssh/sshd_config.d/00-mainframe.conf.new"
+    cp "$ASSETS_DIR/ssh/00-mainframe.conf" "$tmp_conf" 2>/dev/null || echo "[harden] SSH config template not found (non-Linux?)"
+    if [ -f "$tmp_conf" ]; then
+      # Validate the combined config
+      cp /etc/ssh/sshd_config /tmp/sshd_config_backup 2>/dev/null || true
+      if sshd -t 2>/dev/null; then
+        mv "$tmp_conf" /etc/ssh/sshd_config.d/00-mainframe.conf
+        echo "[harden] SSH config applied and validated"
+      else
+        echo "[harden] ERROR: SSH config validation failed. NOT applying."
+        rm -f "$tmp_conf"
+      fi
+    fi
     groupadd -f sshusers 2>/dev/null || true
     # Add users with SSH authorized_keys to sshusers group
     for home in /root /home/*; do
@@ -358,7 +375,7 @@ if [ -d /etc/.git ]; then
 fi
 
 # Run audit after hardening
-if should_run "audit"; then
+if should_run "audit" && [ "${SKIP_AUDIT:-false}" != "true" ]; then
 echo ""
 echo "[harden] Running audit (post-hardening)..."
 if [ -f "$AUDIT_DIR/audit.sh" ]; then

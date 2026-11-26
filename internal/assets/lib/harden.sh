@@ -215,21 +215,9 @@ fi
 if should_run "firewall" && command -v ufw &>/dev/null; then
   if ! ufw status 2>/dev/null | grep -q "Status: active"; then
     echo "[harden] Firewall is inactive. Re-enabling..."
-    # Safety: check if Tailscale is connected
-    if ! tailscale status >/dev/null 2>&1; then
-      echo "[harden] WARNING: Tailscale is NOT connected. Using public mode for SSH (port 22)."
-      echo "[harden] Re-enable tailscale-only mode after Tailscale is connected."
-      # Allow SSH publicly as fallback
-      ufw allow 22/tcp comment 'SSH (public, tailscale down)' 2>/dev/null || true
-    else
-      # Tailscale is connected, use configured mode
-      TS_IP=$(tailscale ip -4 2>/dev/null || echo "")
-      if [ -n "$TS_IP" ]; then
-        ufw allow from 100.64.0.0/10 to any port 22 comment 'SSH via Tailscale' 2>/dev/null || true
-      else
-        ufw allow 22/tcp comment 'SSH (break-glass)' 2>/dev/null || true
-      fi
-    fi
+    # Safety: ALWAYS allow SSH on port 22 (public) as a fallback
+    # This prevents lockout even if Tailscale is down
+    ufw allow 22/tcp comment 'SSH (break-glass, always)' 2>/dev/null || true
     # Also allow Tailscale
     ufw allow 41641/udp comment 'Tailscale' 2>/dev/null || true
     # Allow HTTP/HTTPS
@@ -237,6 +225,13 @@ if should_run "firewall" && command -v ufw &>/dev/null; then
     ufw allow 443/tcp comment 'HTTPS' 2>/dev/null || true
     ufw --force enable 2>/dev/null || true
     echo "[harden] Firewall enabled"
+    # Verify SSH is accessible
+    sleep 1
+    if ss -tlnp 2>/dev/null | grep -q ':22 '; then
+      echo "[harden] SSH port 22 is listening ✓"
+    else
+      echo "[harden] WARNING: SSH port 22 is NOT listening after firewall enable!"
+    fi
     # Verify SSH is accessible
     sleep 1
     if ss -tlnp 2>/dev/null | grep -q ':22 '; then

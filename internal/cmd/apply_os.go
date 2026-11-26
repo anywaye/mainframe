@@ -3,12 +3,13 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
 // applyOSSettings applies OS-specific settings from os.sh or os/ directory.
 func applyOSSettings(dryRun bool, osFamily string) {
-	fmt.Println("\n[12/14] Applying OS-specific settings...")
+	fmt.Println("\n[12/18] Applying OS-specific settings...")
 	osScript := ""
 	if _, err := os.Stat("os.sh"); err == nil {
 		osScript = "os.sh"
@@ -36,7 +37,7 @@ func applyMacOSDefaults(dryRun bool, osFamily string) {
 	if osFamily != "darwin" {
 		return
 	}
-	fmt.Println("\n[13/14] Applying macOS defaults...")
+	fmt.Println("\n[13/18] Applying macOS defaults...")
 	if _, err := os.Stat("macos/defaults.sh"); err == nil {
 		if dryRun {
 			fmt.Println("  [dry-run] Would apply macos/defaults.sh")
@@ -50,7 +51,7 @@ func applyMacOSDefaults(dryRun bool, osFamily string) {
 
 // applyAgentConfigs syncs agent configurations.
 func applyAgentConfigs(dryRun bool) {
-	fmt.Println("\n[14/14] Syncing agent configs...")
+	fmt.Println("\n[14/18] Syncing agent configs...")
 	if _, err := os.Stat("agents/registry.json"); err != nil {
 		fmt.Println("  No agents/registry.json found. Skipping.")
 		return
@@ -73,5 +74,43 @@ func applyAgentConfigs(dryRun bool) {
 			echo "  jq not found. Skipping agent sync."
 		fi
 		echo "  Agent sync complete"
+	`)
+}
+
+
+// applyTailscale checks Tailscale connectivity and re-authenticates if needed.
+func applyTailscale(dryRun bool) {
+	fmt.Println("\n[1b/18] Checking Tailscale connectivity...")
+	if _, err := exec.LookPath("tailscale"); err != nil {
+		fmt.Println("  Tailscale not installed. Skipping.")
+		return
+	}
+	if dryRun {
+		fmt.Println("  [dry-run] Would check Tailscale connectivity")
+		return
+	}
+	runShellStep("tailscale check", `
+		if tailscale status >/dev/null 2>&1; then
+			echo "  Tailscale: connected"
+			ip=$(tailscale ip -4 2>/dev/null)
+			echo "  Tailscale IP: $ip"
+		else
+			echo "  Tailscale: NOT connected. Attempting re-authentication..."
+			AUTHKEY=""
+			if [ -f /var/lib/mainframe/tailscale-authkey ]; then
+				AUTHKEY=$(cat /var/lib/mainframe/tailscale-authkey)
+			fi
+			if [ -n "$AUTHKEY" ]; then
+				tailscale up --authkey="$AUTHKEY" 2>&1 | tail -2
+				sleep 3
+				if tailscale status >/dev/null 2>&1; then
+					echo "  Tailscale: reconnected successfully"
+				else
+					echo "  WARNING: Tailscale still not connected. Check authkey."
+				fi
+			else
+				echo "  No authkey found. Run: tailscale up --authkey=<your-key>"
+			fi
+		fi
 	`)
 }

@@ -32,10 +32,11 @@ type stepFunc struct {
 func allSteps() []stepFunc {
 	return []stepFunc{
 		{"os-detect", "Detect operating system", func(dry bool) {
-			fmt.Println("\n[1/14] Detecting OS...")
+			fmt.Println("\n[1/18] Detecting OS...")
 			fam := detectOSFamily("")
 			fmt.Printf("  OS family: %s\n", fam)
 		}},
+		{"tailscale", "Check Tailscale connectivity", applyTailscale},
 		{"packages", "Install system packages", applyPackages},
 		{"runtimes", "Install language runtimes", applyRuntimes},
 		{"custom-installs", "Run custom install scripts", applyCustomInstalls},

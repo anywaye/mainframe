@@ -7,7 +7,7 @@ import (
 
 // applyShellConfig syncs shell configuration files.
 func applyShellConfig(dryRun bool) {
-	fmt.Println("\n[4/14] Syncing shell config...")
+	fmt.Println("\n[4/18] Syncing shell config...")
 	if _, err := os.Stat("shell"); err != nil {
 		fmt.Println("  No shell/ directory. Skipping.")
 		return
@@ -71,7 +71,7 @@ func applyShellConfig(dryRun bool) {
 
 // applyGitConfig syncs git configuration files.
 func applyGitConfig(dryRun bool) {
-	fmt.Println("\n[5/14] Syncing git config...")
+	fmt.Println("\n[5/18] Syncing git config...")
 	if _, err := os.Stat("git"); err != nil {
 		fmt.Println("  No git/ directory. Skipping.")
 		return
@@ -104,7 +104,7 @@ func applyGitConfig(dryRun bool) {
 
 // applyEditorConfig syncs editor configuration.
 func applyEditorConfig(dryRun bool) {
-	fmt.Println("\n[6/14] Syncing editor config...")
+	fmt.Println("\n[6/18] Syncing editor config...")
 	if _, err := os.Stat("editor"); err != nil {
 		fmt.Println("  No editor/ directory. Skipping.")
 		return
@@ -127,7 +127,7 @@ func applyEditorConfig(dryRun bool) {
 
 // applyTerminalConfig syncs terminal configuration.
 func applyTerminalConfig(dryRun bool) {
-	fmt.Println("\n[7/14] Syncing terminal config...")
+	fmt.Println("\n[7/18] Syncing terminal config...")
 	if _, err := os.Stat("terminal"); err != nil {
 		fmt.Println("  No terminal/ directory. Skipping.")
 		return
@@ -156,7 +156,7 @@ func applyTerminalConfig(dryRun bool) {
 
 // applySSHConfig syncs SSH configuration.
 func applySSHConfig(dryRun bool) {
-	fmt.Println("\n[8/14] Syncing SSH config...")
+	fmt.Println("\n[8/18] Syncing SSH config...")
 	if _, err := os.Stat("ssh"); err != nil {
 		fmt.Println("  No ssh/ directory. Skipping.")
 		return
@@ -189,7 +189,7 @@ func applySSHConfig(dryRun bool) {
 
 // applyMCPConfig syncs MCP configuration.
 func applyMCPConfig(dryRun bool) {
-	fmt.Println("\n[9/14] Syncing MCP config...")
+	fmt.Println("\n[9/18] Syncing MCP config...")
 	if _, err := os.Stat("mcp/config.json"); err != nil {
 		fmt.Println("  No mcp/config.json found. Skipping.")
 		return
@@ -224,7 +224,7 @@ json.dump(d, open(p,'w'), indent=2)
 
 // applySkills syncs AI agent skills.
 func applySkills(dryRun bool) {
-	fmt.Println("\n[10/14] Syncing skills...")
+	fmt.Println("\n[10/18] Syncing skills...")
 	if _, err := os.Stat("skills"); err != nil {
 		fmt.Println("  No skills/ directory. Skipping.")
 		return
@@ -242,7 +242,7 @@ func applySkills(dryRun bool) {
 
 // applyBinScripts syncs custom bin scripts.
 func applyBinScripts(dryRun bool) {
-	fmt.Println("\n[11/14] Syncing bin scripts...")
+	fmt.Println("\n[11/18] Syncing bin scripts...")
 	if _, err := os.Stat("bin"); err != nil {
 		fmt.Println("  No bin/ directory. Skipping.")
 		return
@@ -273,7 +273,7 @@ func applyBinScripts(dryRun bool) {
 
 // applyCustomInstalls runs custom install scripts from install/ directory.
 func applyCustomInstalls(dryRun bool) {
-	fmt.Println("\n[12b/14] Running custom install scripts...")
+	fmt.Println("\n[12b/18] Running custom install scripts...")
 	if _, err := os.Stat("install"); err != nil {
 		fmt.Println("  No install/ directory. Skipping.")
 		return

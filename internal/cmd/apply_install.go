@@ -7,7 +7,7 @@ import (
 
 // applyPackages installs system packages from packages.conf.
 func applyPackages(dryRun bool) {
-	fmt.Println("\n[2/14] Installing packages...")
+	fmt.Println("\n[2/18] Installing packages...")
 	if _, err := os.Stat("packages.conf"); err != nil {
 		fmt.Println("  No packages.conf found. Skipping.")
 		return
@@ -49,7 +49,7 @@ func applyPackages(dryRun bool) {
 
 // applyRuntimes installs language runtimes from runtimes.conf.
 func applyRuntimes(dryRun bool) {
-	fmt.Println("\n[3/14] Installing runtimes...")
+	fmt.Println("\n[3/18] Installing runtimes...")
 	if _, err := os.Stat("runtimes.conf"); err == nil {
 		if dryRun {
 			fmt.Println("  [dry-run] Would install runtimes from runtimes.conf")
@@ -90,7 +90,7 @@ func applyRuntimes(dryRun bool) {
 
 // applySSHKeys fetches SSH keys from password manager.
 func applySSHKeys(dryRun bool) {
-	fmt.Println("\n[8b/14] Fetching SSH keys from password manager...")
+	fmt.Println("\n[8b/18] Fetching SSH keys from password manager...")
 	if _, err := os.Stat("mainframe.yml"); err != nil {
 		fmt.Println("  No mainframe.yml found. Skipping.")
 		return
@@ -166,7 +166,7 @@ else:
 
 // applySecrets unlocks the secrets vault and stores the session.
 func applySecrets(dryRun bool) {
-	fmt.Println("\n[8a/16] Managing secrets vault...")
+	fmt.Println("\n[8a/18] Managing secrets vault...")
 	if dryRun {
 		fmt.Println("  [dry-run] Would check/unlock secrets vault")
 		return

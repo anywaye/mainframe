@@ -286,7 +286,7 @@ After=tailscaled.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'systemctl is-active --quiet tailscaled || systemctl restart tailscaled'
+ExecStart=/bin/bash -c 'AUTHKEY="${TAILSCALE_AUTHKEY:-}"; [ -z "$AUTHKEY" ] && [ -f /var/lib/mainframe/tailscale-authkey ] && AUTHKEY=$(cat /var/lib/mainframe/tailscale-authkey); systemctl is-active --quiet tailscaled || systemctl restart tailscaled; tailscale status >/dev/null 2>&1 || tailscale up --authkey="$AUTHKEY" 2>/dev/null || true'
 SVC
   cat > /etc/systemd/system/mainframe-tailscale-watchdog.timer << 'TIMER'
 [Unit]
@@ -294,7 +294,7 @@ Description=Mainframe Tailscale watchdog timer
 
 [Timer]
 OnBootSec=300
-OnUnitActiveSec=300
+OnUnitActiveSec=60
 Unit=mainframe-tailscale-watchdog.service
 
 [Install]
@@ -302,7 +302,7 @@ WantedBy=timers.target
 TIMER
   systemctl daemon-reload 2>/dev/null || true
   systemctl enable --now mainframe-tailscale-watchdog.timer 2>/dev/null || true
-  echo "[harden] Tailscale watchdog installed (restarts tailscaled if it crashes)"
+  echo "[harden] Tailscale watchdog installed (checks every 1 min)"
 fi
 
 # Crash prevention (memory, disk, CPU, process protection)

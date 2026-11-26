@@ -176,17 +176,48 @@ fi
 
 echo "[crash-prevention] Shutdown logger installed (captures details before any shutdown)"
 
-# OS idle/sleep prevention (prevents systemd from suspending the system)
-# This is the #1 cause of "VPS stops when idle" issues on Ubuntu.
-systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
-echo "[crash-prevention] Disabled systemd sleep/suspend/hibernate (prevents idle shutdown)"
-
-# SSH keepalive (prevent connection drops on idle)
-if ! grep -q "ClientAliveInterval" /etc/ssh/sshd_config 2>/dev/null; then
-  echo "ClientAliveInterval 60" >> /etc/ssh/sshd_config
-  echo "ClientAliveCountMax 3" >> /etc/ssh/sshd_config
-  systemctl restart ssh 2>/dev/null || true
-  echo "[crash-prevention] SSH keepalive configured (60s interval)"
+# --- Anti-idle (prevent Contabo from stopping idle VPSes) ---
+echo "[crash-prevention] Setting up anti-idle (Contabo idle detection workaround)..."
+# Ensure stress is installed (for anti-idle CPU load generation)
+if ! command -v stress &>/dev/null; then
+  apt-get install -y -qq stress 2>&1 | tail -1 || true
 fi
+cat > /usr/local/bin/mainframe-anti-idle << 'IDLEEOF'
+#!/bin/bash
+# Generate light CPU load to prevent Contabo idle detection
+if command -v stress &>/dev/null; then
+  stress --cpu 1 --timeout 5s 2>/dev/null || true
+else
+  # Fallback: use dd to generate CPU load (no external dependency)
+  dd if=/dev/urandom of=/dev/null bs=1M count=10 2>/dev/null || true
+fi
+# Tailscale keep-alive: ensure connected
+if command -v tailscale &>/dev/null; then
+  tailscale status >/dev/null 2>&1 || tailscale up --authkey="$(cat /var/lib/mainframe/tailscale-authkey 2>/dev/null)" 2>/dev/null || true
+fi
+# Also ping healthchecks.io if configured
+if [ -n "${HEALTHCHECK_URL:-}" ]; then
+  curl -fsS -o /dev/null "$HEALTHCHECK_URL" 2>/dev/null || true
+fi
+IDLEEOF
+chmod +x /usr/local/bin/mainframe-anti-idle
+if ! crontab -l 2>/dev/null | grep -q "mainframe-anti-idle"; then
+  (crontab -l 2>/dev/null || true; echo "* * * * * /usr/local/bin/mainframe-anti-idle") | crontab - 2>/dev/null || true
+  echo "[crash-prevention] Anti-idle cron job installed (runs every minute)"
+fi
+
+# --- Network interface power saving (prevent NIC from sleeping) ---
+echo "[crash-prevention] Disabling network interface power saving..."
+for dev in /sys/bus/pci/devices/*/power/control; do
+  if [ -w "$dev" ]; then
+    echo "on" > "$dev" 2>/dev/null || true
+  fi
+done
+for dev in /sys/class/net/*/device/power/control; do
+  if [ -w "$dev" ]; then
+    echo "on" > "$dev" 2>/dev/null || true
+  fi
+done
+echo "[crash-prevention] Network power saving disabled"
 
 echo "[crash-prevention] All crash prevention measures applied."

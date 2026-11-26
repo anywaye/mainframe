@@ -345,19 +345,19 @@ var fleetApplyCmd = &cobra.Command{
 					fmt.Printf("  ERROR: %v\n", err)
 				} else {
 					fmt.Println("  Done.")
-					// Auto-register sandboxes if enabled
-					sb := m.Sandboxes
-					if sb == nil {
-						sb = &fleet.Sandboxes
-					}
-					if sb != nil && sb.Enabled {
-						fmt.Printf("  Sandboxes enabled (backend: %s)\n", sb.Backend)
+					// Pull chats after apply
+					fmt.Println("  Pulling chats...")
+					chatsCmd := exec.Command("mf", "chats", "pull", fleetName)
+					chatsCmd.Stdout = os.Stdout
+					chatsCmd.Stderr = os.Stderr
+					if err := chatsCmd.Run(); err != nil {
+						fmt.Printf("  Warning: chats pull failed: %v\n", err)
 					}
 				}
 			} else {
 				// Apply via SSH
 				fmt.Printf("  Applying via SSH to %s...\n", m.Host)
-				sshCmd := exec.Command("ssh", m.Host, "cd ~/.mainframe 2>/dev/null || cd ~/mainframe 2>/dev/null; mf apply")
+				sshCmd := exec.Command("ssh", m.Host, "cd ~/.mainframe 2>/dev/null || cd ~/mainframe 2>/dev/null; mf apply && mf chats pull "+fleetName)
 				sshCmd.Stdout = os.Stdout
 				sshCmd.Stderr = os.Stderr
 				if err := sshCmd.Run(); err != nil {
@@ -491,14 +491,23 @@ var fleetSyncCmd = &cobra.Command{
 				if err := applyCmd.Run(); err != nil {
 					fmt.Printf("  ERROR on %s: %v\n", m.Name, err)
 				} else {
-					fmt.Printf("  %s: done\n", m.Name)
+					fmt.Printf("  %s: apply done\n", m.Name)
+					chatsCmd := exec.Command("mf", "chats", "pull", fleetName)
+					chatsCmd.Dir = configDir
+					chatsCmd.Stdout = os.Stdout
+					chatsCmd.Stderr = os.Stderr
+					if err := chatsCmd.Run(); err != nil {
+						fmt.Printf("  Warning: chats pull failed on %s: %v\n", m.Name, err)
+					} else {
+						fmt.Printf("  %s: chats pulled\n", m.Name)
+					}
 				}
 				continue
 			}
 
 			fmt.Printf("  [%d] %s (%s): syncing...\n", i+1, m.Name, m.Host)
 			sshCmd := exec.Command("ssh", "-o", "ConnectTimeout=10", m.Host,
-				"cd ~/.mainframe 2>/dev/null && git pull --rebase && mf apply")
+				"cd ~/.mainframe 2>/dev/null && git pull --rebase && mf apply && mf chats pull "+fleetName)
 			sshCmd.Stdout = os.Stdout
 			sshCmd.Stderr = os.Stderr
 			if err := sshCmd.Run(); err != nil {

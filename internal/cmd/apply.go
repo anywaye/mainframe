@@ -59,6 +59,7 @@ func allSteps() []stepFunc {
 			applyMacOSDefaults(dry, fam)
 		}},
 		{"agents", "Sync agent configurations", applyAgentConfigs},
+		{"chats", "Sync agent chat sessions", applyChatsConfig},
 	}
 }
 

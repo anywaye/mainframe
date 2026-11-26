@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 // applyShellConfig syncs shell configuration files.
@@ -289,5 +290,44 @@ func applyCustomInstalls(dryRun bool) {
 			bash "$script" 2>&1 | tail -3 || echo "  Warning: $script failed"
 		done
 		echo "  Custom installs complete"
+	`)
+}
+
+// applyChatsConfig syncs agent chat sessions.
+func applyChatsConfig(dryRun bool) {
+	fmt.Println("\n[19/19] Syncing agent chats...")
+	// Check if any agent has chats configured
+	hasChats := false
+	for _, agentDir := range []string{"agents/zcode", "agents/opencode"} {
+		if _, err := os.Stat(filepath.Join(agentDir, "chats")); err == nil {
+			hasChats = true
+			break
+		}
+	}
+	if !hasChats {
+		fmt.Println("  No agent chats configured. Skipping.")
+		fmt.Println("  (Add agents/<name>/chats/ to your config repo to enable)")
+		return
+	}
+	if dryRun {
+		fmt.Println("  [dry-run] Would sync agent chats")
+		return
+	}
+	runShellStep("sync chats", `
+		# Ensure chat data directories exist
+		mkdir -p "$HOME/.zcode/v2" "$HOME/.zcode/cli/rollout" "$HOME/.opencode"
+		# Check if litestream is available for real-time sync
+		if command -v litestream &>/dev/null; then
+			echo "  Litestream: available"
+		else
+			echo "  Litestream: not installed (install via 'brew install litestream' or download from litestream.io)"
+		fi
+		# Check if minio is available for storage backend
+		if command -v minio &>/dev/null; then
+			echo "  MinIO: available"
+		else
+			echo "  MinIO: not installed (install via 'brew install minio' or download from min.io)"
+		fi
+		echo "  Chat sync: configured (run 'mf chats pull' to sync from peers)"
 	`)
 }

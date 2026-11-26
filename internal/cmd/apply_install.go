@@ -130,11 +130,12 @@ func applySSHKeys(dryRun bool) {
 
 		if [ "$status" = "unlocked" ]; then
 			echo "  Vault is unlocked. Fetching SSH keys..."
-			for item_name in "GitHub SSH Key" "dev-mf SSH Key"; do
+			for item_name in "GitHub SSH Key" "dev-mf SSH Key" "app-mf SSH Key"; do
 				key_path=""
 				case "$item_name" in
 					"GitHub SSH Key") key_path="$HOME/.ssh/id_ed25519" ;;
 					"dev-mf SSH Key") key_path="$HOME/.ssh/dev-mf" ;;
+					"app-mf SSH Key") key_path="$HOME/.ssh/app-mf" ;;
 				esac
 				if [ -n "$key_path" ] && [ ! -f "$key_path" ]; then
 					echo "  Fetching: $item_name -> $key_path"

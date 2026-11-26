@@ -416,5 +416,23 @@ func applyChatsConfig(dryRun bool) {
 		fmt.Printf("  Configured: %s\n", agentDir)
 	}
 
+	// Step 7: Install sync daemon (macOS LaunchAgent)
+	runShellStep("install sync daemon", `
+		if [ "$(uname)" = "Darwin" ]; then
+			PLIST="$HOME/Library/LaunchAgents/com.mainframe.chats-sync.plist"
+			if [ -f "storage/launchd/com.mainframe.chats-sync.plist" ]; then
+				mkdir -p "$HOME/Library/LaunchAgents"
+				sed "s|\$HOME|$HOME|g" "storage/launchd/com.mainframe.chats-sync.plist" > "$PLIST"
+				echo "  LaunchAgent installed: $PLIST"
+				echo "  Start with: mf chats daemon start"
+			else
+				echo "  No LaunchAgent plist found. Skipping."
+			fi
+		else
+			echo "  Non-macOS: sync daemon setup skipped (use systemd manually)"
+		fi
+	`)
+
 	fmt.Println("  Chat sync configured. Run 'mf chats pull' to sync from peers.")
+	fmt.Println("  Start sync daemon with: mf chats daemon start")
 }

@@ -23,6 +23,7 @@ func init() {
 	chatsCmd.AddCommand(chatsPushCmd())
 	chatsCmd.AddCommand(chatsStatusCmd())
 	chatsCmd.AddCommand(chatsListCmd())
+	chatsCmd.AddCommand(chatsDaemonCmd())
 	rootCmd.AddCommand(chatsCmd)
 }
 
@@ -311,3 +312,68 @@ func countLocalSessions(home string) int {
 
 // loadFleet is already defined in fleet.go
 // resolveConfigDir is already defined in fleet.go
+
+// chatsDaemonCmd manages the sync daemon.
+func chatsDaemonCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "daemon",
+		Short: "Manage the chat sync daemon",
+	}
+	cmd.AddCommand(chatsDaemonStartCmd())
+	cmd.AddCommand(chatsDaemonStopCmd())
+	cmd.AddCommand(chatsDaemonStatusCmd())
+	return cmd
+}
+
+func chatsDaemonStartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "start",
+		Short: "Start the chat sync daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			home, _ := os.UserHomeDir()
+			plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.mainframe.chats-sync.plist")
+			if _, err := os.Stat(plistPath); err != nil {
+				return fmt.Errorf("LaunchAgent not installed. Run 'mf apply chats' first")
+			}
+			exec.Command("launchctl", "load", plistPath).Run()
+			fmt.Println("Chat sync daemon started")
+			return nil
+		},
+	}
+}
+
+func chatsDaemonStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the chat sync daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			home, _ := os.UserHomeDir()
+			plistPath := filepath.Join(home, "Library", "LaunchAgents", "com.mainframe.chats-sync.plist")
+			exec.Command("launchctl", "unload", plistPath).Run()
+			fmt.Println("Chat sync daemon stopped")
+			return nil
+		},
+	}
+}
+
+func chatsDaemonStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Show chat sync daemon status",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out, _ := exec.Command("pgrep", "-x", "minio").Output()
+			if len(out) > 0 {
+				fmt.Println("MinIO: running")
+			} else {
+				fmt.Println("MinIO: not running")
+			}
+			out, _ = exec.Command("pgrep", "-x", "litestream").Output()
+			if len(out) > 0 {
+				fmt.Println("Litestream: running")
+			} else {
+				fmt.Println("Litestream: not running")
+			}
+			return nil
+		},
+	}
+}

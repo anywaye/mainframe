@@ -160,6 +160,18 @@ if should_run "ssh" && [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
       fi
     done
     sshd -t 2>/dev/null && echo "[harden] SSH config valid" || echo "[harden] SSH validation skipped"
+    # Restart SSH to apply new config (existing sessions are kept)
+    if sshd -t 2>/dev/null; then
+      systemctl restart ssh 2>/dev/null || service ssh restart 2>/dev/null || true
+      echo "[harden] SSH service restarted"
+      # Verify SSH is accessible
+      sleep 1
+      if ss -tlnp 2>/dev/null | grep -q ':22 '; then
+        echo "[harden] SSH port 22 is listening ✓"
+      else
+        echo "[harden] WARNING: SSH port 22 is NOT listening!"
+      fi
+    fi
   fi
 fi
 
@@ -203,8 +215,24 @@ fi
 if should_run "firewall" && command -v ufw &>/dev/null; then
   if ! ufw status 2>/dev/null | grep -q "Status: active"; then
     echo "[harden] Firewall is inactive. Re-enabling..."
+    # Safety: ensure SSH is allowed before enabling firewall
+    if ! ufw status 2>/dev/null | grep -q "22/tcp"; then
+      echo "[harden] Adding SSH allow rule before enabling firewall..."
+      ufw allow 22/tcp comment 'SSH (break-glass)' 2>/dev/null || true
+    fi
+    # Also allow Tailscale
+    if ! ufw status 2>/dev/null | grep -q "41641/udp"; then
+      ufw allow 41641/udp comment 'Tailscale' 2>/dev/null || true
+    fi
     ufw --force enable 2>/dev/null || true
     echo "[harden] Firewall enabled"
+    # Verify SSH is accessible
+    sleep 1
+    if ss -tlnp 2>/dev/null | grep -q ':22 '; then
+      echo "[harden] SSH port 22 is listening ✓"
+    else
+      echo "[harden] WARNING: SSH port 22 is NOT listening after firewall enable!"
+    fi
   fi
 fi
 

@@ -117,7 +117,7 @@ Every directory is optional. The framework applies what's there, skips what's no
 | `mf fleet sync <fleet>` | Sync config across all machines in a fleet |
 | `mf fleet status <fleet>` | Show health status of fleet machines |
 | `mf fleet diff <fleet>` | Compare all machines in a fleet vs config |
-| `mf fleet register-boax <fleet>` | Register fleet machines as boax pools |
+| `mf fleet diff <fleet>` | Compare all machines in a fleet vs config |
 
 ### Security & SSH
 | Command | Description |

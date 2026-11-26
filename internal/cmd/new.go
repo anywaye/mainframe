@@ -384,15 +384,20 @@ Host github.com
 
 const fleetDevYML = `name: dev
 description: "Development machines"
-boax: false
+sandboxes:
+  enabled: false
+  backend: boax
 machines: []
 # Add machines with: mf fleet add dev <name> --host <host> --os <os>
 # Or edit this file directly.
+# Set sandboxes.enabled: true to register machines as sandbox backends.
 `
 
 const fleetProdYML = `name: prod
 description: "Production servers"
-boax: false
+sandboxes:
+  enabled: false
+  backend: boax
 machines: []
 # Add machines with: mf fleet add prod <name> --host <host> --os <os>
 # Or edit this file directly.

@@ -14,18 +14,25 @@ import (
 
 // FleetMachine represents a single machine in a fleet.
 type FleetMachine struct {
-	Name    string `yaml:"name"`
-	Host    string `yaml:"host"`    // "local" or "user@host"
-	OS      string `yaml:"os"`      // macos, ubuntu-24.04, debian-12, etc.
-	Mode    string `yaml:"mode"`    // dev or prod
-	SSHKey  string `yaml:"ssh_key"` // Bitwarden item name for SSH key
+	Name       string         `yaml:"name"`
+	Host       string         `yaml:"host"`    // "local" or "user@host"
+	OS         string         `yaml:"os"`      // macos, ubuntu-24.04, debian-12, etc.
+	Mode       string         `yaml:"mode"`    // dev or prod
+	SSHKey     string         `yaml:"ssh_key"` // Bitwarden item name for SSH key
+	Sandboxes  *SandboxConfig `yaml:"sandboxes"` // override fleet-level setting
 }
 
 // FleetConfig represents a fleet definition.
+type SandboxConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Backend string `yaml:"backend"` // boax, etc.
+	URL     string `yaml:"url"`     // backend server URL
+}
+
 type FleetConfig struct {
 	Name        string         `yaml:"name"`
 	Description string         `yaml:"description"`
-	Boax        bool           `yaml:"boax"` // register as boax pools
+	Sandboxes   SandboxConfig  `yaml:"sandboxes"`
 	Machines    []FleetMachine `yaml:"machines"`
 }
 
@@ -73,10 +80,14 @@ var fleetCreateCmd = &cobra.Command{
 			return fmt.Errorf("fleet %s already exists at %s", name, fleetFile)
 		}
 
+		sandboxes := SandboxConfig{Enabled: fleetBoax}
+		if fleetBoax {
+			sandboxes.Backend = "boax"
+		}
 		fleet := FleetConfig{
 			Name:        name,
 			Description: fmt.Sprintf("%s machines", name),
-			Boax:        fleetBoax,
+			Sandboxes:   sandboxes,
 			Machines:    []FleetMachine{},
 		}
 
@@ -91,7 +102,7 @@ var fleetCreateCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Created fleet %q at %s\n", name, fleetFile)
-		fmt.Printf("  boax integration: %v\n", fleetBoax)
+		fmt.Printf("  sandboxes: enabled=%v\n", fleetBoax)
 		fmt.Println("\nAdd machines with:")
 		fmt.Printf("  mf fleet add %s <name> --host <host> --os <os>\n", name)
 		fmt.Println("\nOr edit the file directly:")
@@ -138,11 +149,11 @@ var fleetListCmd = &cobra.Command{
 				fmt.Printf("  %-12s (error: %v)\n", fleetName, err)
 				continue
 			}
-			boaxStr := ""
-			if fleet.Boax {
-				boaxStr = " [boax]"
+			sbStr := ""
+			if fleet.Sandboxes.Enabled {
+				sbStr = fmt.Sprintf(" [sandboxes: %s]", fleet.Sandboxes.Backend)
 			}
-			fmt.Printf("  %-12s %d machines%s\n", fleetName, len(fleet.Machines), boaxStr)
+			fmt.Printf("  %-12s %d machines%s\n", fleetName, len(fleet.Machines), sbStr)
 		}
 		return nil
 	},
@@ -164,7 +175,14 @@ var fleetShowCmd = &cobra.Command{
 		if fleet.Description != "" {
 			fmt.Printf("Description: %s\n", fleet.Description)
 		}
-		fmt.Printf("Boax integration: %v\n", fleet.Boax)
+		if fleet.Sandboxes.Enabled {
+			fmt.Printf("Sandboxes: enabled (backend: %s)\n", fleet.Sandboxes.Backend)
+			if fleet.Sandboxes.URL != "" {
+				fmt.Printf("  URL: %s\n", fleet.Sandboxes.URL)
+			}
+		} else {
+			fmt.Println("Sandboxes: disabled")
+		}
 		fmt.Printf("Machines: %d\n\n", len(fleet.Machines))
 
 		if len(fleet.Machines) == 0 {
@@ -172,13 +190,29 @@ var fleetShowCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Printf("  %-16s %-28s %-16s %-6s %s\n", "NAME", "HOST", "OS", "MODE", "SSH KEY")
+		fmt.Printf("  %-16s %-28s %-16s %-6s %-10s %s\n", "NAME", "HOST", "OS", "MODE", "SANDBOX", "SSH KEY")
 		for _, m := range fleet.Machines {
 			sshKey := m.SSHKey
 			if sshKey == "" {
 				sshKey = "-"
 			}
-			fmt.Printf("  %-16s %-28s %-16s %-6s %s\n", m.Name, m.Host, m.OS, m.Mode, sshKey)
+			sb := "-"
+			if m.Sandboxes != nil {
+				if m.Sandboxes.Enabled {
+					sb = m.Sandboxes.Backend
+					if sb == "" {
+						sb = "yes"
+					}
+				} else {
+					sb = "no"
+				}
+			} else if fleet.Sandboxes.Enabled {
+				sb = fleet.Sandboxes.Backend
+				if sb == "" {
+					sb = "yes"
+				}
+			}
+			fmt.Printf("  %-16s %-28s %-16s %-6s %-10s %s\n", m.Name, m.Host, m.OS, m.Mode, sb, sshKey)
 		}
 		return nil
 	},
@@ -311,6 +345,14 @@ var fleetApplyCmd = &cobra.Command{
 					fmt.Printf("  ERROR: %v\n", err)
 				} else {
 					fmt.Println("  Done.")
+					// Auto-register sandboxes if enabled
+					sb := m.Sandboxes
+					if sb == nil {
+						sb = &fleet.Sandboxes
+					}
+					if sb != nil && sb.Enabled {
+						fmt.Printf("  Sandboxes enabled (backend: %s)\n", sb.Backend)
+					}
 				}
 			} else {
 				// Apply via SSH
@@ -323,6 +365,15 @@ var fleetApplyCmd = &cobra.Command{
 					fmt.Println("  (Machine may be offline or mf not installed)")
 				} else {
 					fmt.Println("  Done.")
+					// Auto-register sandboxes if enabled
+					sb := m.Sandboxes
+					if sb == nil {
+						sb = &fleet.Sandboxes
+					}
+					if sb != nil && sb.Enabled {
+						fmt.Printf("  Registering %s as sandbox backend (%s)...\n", m.Name, sb.Backend)
+						fmt.Printf("  (Run 'boax machine register --name %s' on %s to complete)\n", m.Name, m.Host)
+					}
 				}
 			}
 			fmt.Println()
@@ -347,10 +398,26 @@ var fleetStatusCmd = &cobra.Command{
 		}
 
 		fmt.Printf("=== Fleet %q status ===\n\n", fleetName)
-		fmt.Printf("  %-16s %-28s %-16s %-10s %s\n", "NAME", "HOST", "OS", "STATUS", "DETAIL")
+		fmt.Printf("  %-16s %-28s %-16s %-10s %-10s %s\n", "NAME", "HOST", "OS", "STATUS", "SANDBOX", "DETAIL")
 		for _, m := range fleet.Machines {
 			status, detail := probeMachine(m)
-			fmt.Printf("  %-16s %-28s %-16s %-10s %s\n", m.Name, m.Host, m.OS, status, detail)
+			sb := "-"
+			if m.Sandboxes != nil {
+				if m.Sandboxes.Enabled {
+					sb = m.Sandboxes.Backend
+					if sb == "" {
+						sb = "yes"
+					}
+				} else {
+					sb = "no"
+				}
+			} else if fleet.Sandboxes.Enabled {
+				sb = fleet.Sandboxes.Backend
+				if sb == "" {
+					sb = "yes"
+				}
+			}
+			fmt.Printf("  %-16s %-28s %-16s %-10s %-10s %s\n", m.Name, m.Host, m.OS, status, sb, detail)
 		}
 		return nil
 	},
@@ -371,38 +438,85 @@ var fleetSyncCmd = &cobra.Command{
 
 		fmt.Printf("=== Syncing fleet %q ===\n\n", fleetName)
 
-		// Pull latest config locally
-		fmt.Println("[1] Pulling latest config locally...")
-		gitCmd := exec.Command("git", "pull", "--rebase")
-		gitCmd.Dir = configDir
-		gitCmd.Stdout = os.Stdout
-		gitCmd.Stderr = os.Stderr
-		if err := gitCmd.Run(); err != nil {
-			fmt.Println("  Warning: git pull failed")
+		// Step 1: Check for local changes and push them
+		fmt.Println("[1/3] Checking for local changes...")
+		statusCmd := exec.Command("git", "status", "--porcelain")
+		statusCmd.Dir = configDir
+		statusOut, _ := statusCmd.Output()
+		if len(statusOut) > 0 {
+			fmt.Println("  Local changes detected. Committing and pushing...")
+			addCmd := exec.Command("git", "add", "-A")
+			addCmd.Dir = configDir
+			addCmd.Run()
+			commitCmd := exec.Command("git", "commit", "-m", "fleet sync: update config")
+			commitCmd.Dir = configDir
+			commitCmd.Stdout = os.Stdout
+			commitCmd.Stderr = os.Stderr
+			if err := commitCmd.Run(); err != nil {
+				fmt.Println("  Warning: commit failed (may have nothing to commit)")
+			} else {
+				pushCmd := exec.Command("git", "push")
+				pushCmd.Dir = configDir
+				pushCmd.Stdout = os.Stdout
+				pushCmd.Stderr = os.Stderr
+				if err := pushCmd.Run(); err != nil {
+					fmt.Println("  Warning: push failed (may be offline)")
+				} else {
+					fmt.Println("  Pushed local changes.")
+				}
+			}
+		} else {
+			fmt.Println("  No local changes.")
 		}
 
-		// Push config to each remote machine
+		// Step 2: Pull latest config locally
+		fmt.Println("\n[2/3] Pulling latest config...")
+		pullCmd := exec.Command("git", "pull", "--rebase")
+		pullCmd.Dir = configDir
+		pullCmd.Stdout = os.Stdout
+		pullCmd.Stderr = os.Stderr
+		if err := pullCmd.Run(); err != nil {
+			fmt.Println("  Warning: git pull failed (may be offline)")
+		}
+
+		// Step 3: Sync each machine
+		fmt.Println("\n[3/3] Syncing machines...")
 		for i, m := range fleet.Machines {
 			if m.Host == "local" || m.Host == "" {
+				fmt.Printf("  [%d] %s (local): applying config...\n", i+1, m.Name)
+				applyCmd := exec.Command("mf", "apply")
+				applyCmd.Dir = configDir
+				applyCmd.Stdout = os.Stdout
+				applyCmd.Stderr = os.Stderr
+				if err := applyCmd.Run(); err != nil {
+					fmt.Printf("  ERROR on %s: %v\n", m.Name, err)
+				} else {
+					fmt.Printf("  %s: done\n", m.Name)
+				}
 				continue
 			}
-			fmt.Printf("\n[%d] Syncing to %s (%s)...\n", i+2, m.Name, m.Host)
-			sshCmd := exec.Command("ssh", m.Host, "cd ~/.mainframe 2>/dev/null && git pull --rebase && mf apply")
+
+			fmt.Printf("  [%d] %s (%s): syncing...\n", i+1, m.Name, m.Host)
+			sshCmd := exec.Command("ssh", "-o", "ConnectTimeout=10", m.Host,
+				"cd ~/.mainframe 2>/dev/null && git pull --rebase && mf apply")
 			sshCmd.Stdout = os.Stdout
 			sshCmd.Stderr = os.Stderr
 			if err := sshCmd.Run(); err != nil {
-				fmt.Printf("  ERROR: %v\n", err)
+				fmt.Printf("  ERROR on %s: %v (machine may be offline)\n", m.Name, err)
+			} else {
+				fmt.Printf("  %s: done\n", m.Name)
 			}
 		}
 
 		fmt.Println("\n=== Fleet sync complete ===")
+		fmt.Println("All machines converged to the config repo (source of truth).")
 		return nil
 	},
 }
 
-var fleetRegisterBoaxCmd = &cobra.Command{
-	Use:   "register-boax <fleet>",
-	Short: "Register fleet machines as boax pools",
+var fleetDiffCmd = &cobra.Command{
+	Use:   "diff <fleet>",
+	Short: "Compare all machines in a fleet against config",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fleetName := args[0]
@@ -413,30 +527,42 @@ var fleetRegisterBoaxCmd = &cobra.Command{
 			return err
 		}
 
-		if !fleet.Boax {
-			fmt.Println("Warning: fleet was created without boax integration.")
-			fmt.Println("Set 'boax: true' in the fleet config to enable.")
-		}
-
-		fmt.Printf("=== Registering fleet %q machines as boax pools ===\n\n", fleetName)
+		fmt.Printf("=== Fleet %q diff ===\n\n", fleetName)
 
 		for _, m := range fleet.Machines {
-			fmt.Printf("  %s (%s): ", m.Name, m.Host)
+			fmt.Printf("--- %s (%s) ---\n", m.Name, m.Host)
+
 			if m.Host == "local" || m.Host == "" {
-				fmt.Println("local machine — register manually via boax CLI")
+				// Check local git status
+				gitCmd := exec.Command("git", "status", "--porcelain")
+				gitCmd.Dir = configDir
+				output, _ := gitCmd.Output()
+				if len(output) > 0 {
+					fmt.Println("  Local changes detected:")
+					fmt.Print(string(output))
+				} else {
+					fmt.Println("  No local changes (in sync)")
+				}
 			} else {
-				fmt.Printf("would register as boax pool %q on %s\n", m.Name, m.Host)
-				fmt.Println("  (boax registration requires boax-server URL and credentials)")
+				// Check remote git status
+				sshCmd := exec.Command("ssh", "-o", "ConnectTimeout=5", m.Host, "cd ~/.mainframe 2>/dev/null && git status --porcelain")
+				output, err := sshCmd.Output()
+				if err != nil {
+					fmt.Printf("  ERROR: %v\n", err)
+					continue
+				}
+				if len(output) > 0 {
+					fmt.Println("  Remote changes detected:")
+					fmt.Print(string(output))
+				} else {
+					fmt.Println("  No remote changes (in sync)")
+				}
 			}
+			fmt.Println()
 		}
 
-		fmt.Println("\nTo complete boax registration:")
-		fmt.Println("  1. Ensure boax-server is running")
-		fmt.Println("  2. Set BOAX_URL and BOAX_API_KEY environment variables")
-		fmt.Println("  3. Run: boax machine register --name <machine> --pool <pool>")
-		fmt.Println("\nFleet machines can serve as boax execution backends.")
-		fmt.Println("Mainframe configures them; boax places sandboxes on them.")
-
+		fmt.Println("=== Diff complete ===")
+		fmt.Println("Use 'mf fleet sync <fleet>' to reconcile.")
 		return nil
 	},
 }
@@ -450,10 +576,10 @@ func init() {
 	fleetCmd.AddCommand(fleetApplyCmd)
 	fleetCmd.AddCommand(fleetStatusCmd)
 	fleetCmd.AddCommand(fleetSyncCmd)
-	fleetCmd.AddCommand(fleetRegisterBoaxCmd)
+	fleetCmd.AddCommand(fleetDiffCmd)
 	rootCmd.AddCommand(fleetCmd)
 
-	fleetCreateCmd.Flags().BoolVar(&fleetBoax, "boax", false, "Enable boax pool registration")
+	fleetCreateCmd.Flags().BoolVar(&fleetBoax, "sandboxes", false, "Enable sandbox backend registration (boax)")
 	fleetAddCmd.Flags().StringVar(&fleetMachineHost, "host", "", "Machine host (user@host or 'local')")
 	fleetAddCmd.Flags().StringVar(&fleetMachineOS, "os", "", "Machine OS (macos, ubuntu-24.04, debian-12, etc.)")
 }

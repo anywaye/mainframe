@@ -81,6 +81,11 @@ fi
 
 # Check for existing SSH config customizations
 FORCE_SSH="${FORCE_SSH:-false}"
+# Remove recovery config if present (from mf recover)
+if [ -f /etc/ssh/sshd_config.d/00-recovery.conf ]; then
+  echo "[harden] Removing recovery config (from previous mf recover)..."
+  rm -f /etc/ssh/sshd_config.d/00-recovery.conf
+fi
 EXISTING_SSH_CONFIGS=$(ls /etc/ssh/sshd_config.d/*.conf 2>/dev/null | grep -v "00-mainframe.conf" | grep -v "50-cloud-init.conf" || true)
 if [ -n "$EXISTING_SSH_CONFIGS" ] && [ "$FORCE_SSH" != "true" ]; then
   echo "[harden] Existing SSH config found:"

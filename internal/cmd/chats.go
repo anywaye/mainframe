@@ -238,19 +238,22 @@ func chatsListCmd() *cobra.Command {
 			fmt.Println("=== ZCode Sessions ===")
 			dbPath := filepath.Join(home, ".zcode", "v2", "tasks-index.sqlite")
 			if _, err := os.Stat(dbPath); err == nil {
-				// Use sqlite3 to count sessions
-				out, err := exec.Command("sqlite3", dbPath, "SELECT COUNT(*) FROM tasks;").Output()
-				if err == nil {
-					fmt.Printf("  Total sessions: %s\n", strings.TrimSpace(string(out)))
-				}
-				// List recent sessions
-				out, err = exec.Command("sqlite3", dbPath, "SELECT task_id, title FROM tasks ORDER BY updated_at DESC LIMIT 10;").Output()
-				if err == nil {
-					for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-						if line != "" {
-							fmt.Printf("  - %s\n", line)
+				tableCheck, _ := exec.Command("sqlite3", dbPath, "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks';").Output()
+				if strings.TrimSpace(string(tableCheck)) == "tasks" {
+					out, err := exec.Command("sqlite3", dbPath, "SELECT COUNT(*) FROM tasks;").Output()
+					if err == nil {
+						fmt.Printf("  Total sessions: %s\n", strings.TrimSpace(string(out)))
+					}
+					out, err = exec.Command("sqlite3", dbPath, "SELECT task_id, title FROM tasks ORDER BY updated_at DESC LIMIT 10;").Output()
+					if err == nil {
+						for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+							if line != "" {
+								fmt.Printf("  - %s\n", line)
+							}
 						}
 					}
+				} else {
+					fmt.Println("  No sessions yet (database exists but empty)")
 				}
 			} else {
 				fmt.Println("  No ZCode session database found")
@@ -260,17 +263,22 @@ func chatsListCmd() *cobra.Command {
 			fmt.Println("=== OpenCode Sessions ===")
 			ocPath := filepath.Join(home, ".opencode", "opencode.db")
 			if _, err := os.Stat(ocPath); err == nil {
-				out, err := exec.Command("sqlite3", ocPath, "SELECT COUNT(*) FROM sessions;").Output()
-				if err == nil {
-					fmt.Printf("  Total sessions: %s\n", strings.TrimSpace(string(out)))
-				}
-				out, err = exec.Command("sqlite3", ocPath, "SELECT id, title FROM sessions ORDER BY created_at DESC LIMIT 10;").Output()
-				if err == nil {
-					for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-						if line != "" {
-							fmt.Printf("  - %s\n", line)
+				tableCheck, _ := exec.Command("sqlite3", ocPath, "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions';").Output()
+				if strings.TrimSpace(string(tableCheck)) == "sessions" {
+					out, err := exec.Command("sqlite3", ocPath, "SELECT COUNT(*) FROM sessions;").Output()
+					if err == nil {
+						fmt.Printf("  Total sessions: %s\n", strings.TrimSpace(string(out)))
+					}
+					out, err = exec.Command("sqlite3", ocPath, "SELECT id, title FROM sessions ORDER BY created_at DESC LIMIT 10;").Output()
+					if err == nil {
+						for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+							if line != "" {
+								fmt.Printf("  - %s\n", line)
+							}
 						}
 					}
+				} else {
+					fmt.Println("  No sessions yet (database exists but empty)")
 				}
 			} else {
 				fmt.Println("  No OpenCode database found")

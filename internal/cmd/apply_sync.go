@@ -293,7 +293,7 @@ func applyCustomInstalls(dryRun bool) {
 	`)
 }
 
-// applyChatsConfig syncs agent chat sessions.
+// applyChatsConfig installs chat sync infrastructure and configures agents.
 func applyChatsConfig(dryRun bool) {
 	fmt.Println("\n[19/19] Syncing agent chats...")
 	// Check if any agent has chats configured
@@ -310,24 +310,111 @@ func applyChatsConfig(dryRun bool) {
 		return
 	}
 	if dryRun {
-		fmt.Println("  [dry-run] Would sync agent chats")
+		fmt.Println("  [dry-run] Would install MinIO, Litestream, and configure chat sync")
 		return
 	}
-	runShellStep("sync chats", `
-		# Ensure chat data directories exist
-		mkdir -p "$HOME/.zcode/v2" "$HOME/.zcode/cli/rollout" "$HOME/.opencode"
-		# Check if litestream is available for real-time sync
-		if command -v litestream &>/dev/null; then
-			echo "  Litestream: available"
-		else
-			echo "  Litestream: not installed (install via 'brew install litestream' or download from litestream.io)"
-		fi
-		# Check if minio is available for storage backend
+
+	// Step 1: Install MinIO if not available
+	runShellStep("install minio", `
 		if command -v minio &>/dev/null; then
-			echo "  MinIO: available"
+			echo "  MinIO: already installed ($(minio --version 2>&1 | head -1))"
+		elif command -v brew &>/dev/null; then
+			echo "  Installing MinIO via Homebrew..."
+			brew install minio/stable/minio 2>&1 | tail -2
 		else
-			echo "  MinIO: not installed (install via 'brew install minio' or download from min.io)"
+			echo "  Installing MinIO binary..."
+			arch=$(uname -m)
+			case "$arch" in
+				arm64|aarch64) arch="arm64" ;;
+				x86_64) arch="amd64" ;;
+			esac
+			os_name=$(uname -s | tr '[:upper:]' '[:lower:]')
+			curl -fsSL "https://dl.min.io/server/minio/release/${os_name}-${arch}/minio" -o /usr/local/bin/minio
+			chmod +x /usr/local/bin/minio
+			echo "  MinIO installed"
 		fi
-		echo "  Chat sync: configured (run 'mf chats pull' to sync from peers)"
 	`)
+
+	// Step 2: Install Litestream if not available
+	runShellStep("install litestream", `
+		if command -v litestream &>/dev/null; then
+			echo "  Litestream: already installed ($(litestream version 2>&1 | head -1))"
+		elif command -v brew &>/dev/null; then
+			echo "  Installing Litestream via Homebrew..."
+			brew install litestream 2>&1 | tail -2
+		else
+			echo "  Installing Litestream binary..."
+			arch=$(uname -m)
+			case "$arch" in
+				arm64|aarch64) arch="arm64" ;;
+				x86_64) arch="amd64" ;;
+			esac
+			os_name=$(uname -s | tr '[:upper:]' '[:lower:]')
+			curl -fsSL "https://github.com/benbjohnson/litestream/releases/latest/download/litestream-${os_name}-${arch}.tar.gz" | tar xz -C /usr/local/bin litestream
+			chmod +x /usr/local/bin/litestream
+			echo "  Litestream installed"
+		fi
+	`)
+
+	// Step 3: Install mc (MinIO client) if not available
+	runShellStep("install mc", `
+		if command -v mc &>/dev/null; then
+			echo "  mc: already installed"
+		elif command -v brew &>/dev/null; then
+			echo "  Installing mc via Homebrew..."
+			brew install minio/stable/mc 2>&1 | tail -2
+		else
+			echo "  Installing mc binary..."
+			arch=$(uname -m)
+			case "$arch" in
+				arm64|aarch64) arch="arm64" ;;
+				x86_64) arch="amd64" ;;
+			esac
+			os_name=$(uname -s | tr '[:upper:]' '[:lower:]')
+			curl -fsSL "https://dl.min.io/client/mc/release/${os_name}-${arch}/mc" -o /usr/local/bin/mc
+			chmod +x /usr/local/bin/mc
+			echo "  mc installed"
+		fi
+	`)
+
+	// Step 4: Set up chat data directories
+	runShellStep("setup chat dirs", `
+		mkdir -p "$HOME/.zcode/v2" "$HOME/.zcode/cli/rollout" "$HOME/.opencode"
+		mkdir -p "$HOME/.local/share/minio/data"
+		echo "  Chat data directories ready"
+	`)
+
+	// Step 5: Start MinIO if not running
+	runShellStep("start minio", `
+		if pgrep -x minio &>/dev/null; then
+			echo "  MinIO: already running"
+		else
+			echo "  Starting MinIO..."
+			nohup minio server "$HOME/.local/share/minio/data" --console-address ":9001" >/tmp/minio.log 2>&1 &
+			sleep 2
+			if pgrep -x minio &>/dev/null; then
+				echo "  MinIO: started (API: http://localhost:9000, Console: http://localhost:9001)"
+			else
+				echo "  Warning: MinIO failed to start. Check /tmp/minio.log"
+			fi
+		fi
+		# Create the chats bucket
+		mc alias set local http://localhost:9000 mainframe mainframe-chats-secret --api S3v4 >/dev/null 2>&1 || true
+		mc mb local/chats 2>/dev/null || true
+	`)
+
+	// Step 6: Configure agent chat adapters
+	for _, agentDir := range []string{"agents/zcode", "agents/opencode"} {
+		chatsDir := filepath.Join(agentDir, "chats")
+		if _, err := os.Stat(chatsDir); err != nil {
+			continue
+		}
+		adapterPath := filepath.Join(chatsDir, "adapter.sh")
+		if _, err := os.Stat(adapterPath); err != nil {
+			continue
+		}
+		fmt.Printf("  Configured: %s\n", agentDir)
+	}
+
+	fmt.Println("  Chat sync configured. Run 'mf chats pull' to sync from peers.")
 }

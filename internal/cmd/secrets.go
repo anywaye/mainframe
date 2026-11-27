@@ -39,6 +39,7 @@ func isPersonalMode() bool {
 // ==================== MACHINE MODE (Infisical) ====================
 
 var secretsSetupHost string
+var secretsPath string
 var secretsSetupSelfHost bool
 var secretsSetupCloud bool
 
@@ -226,7 +227,10 @@ func machineSet(args []string) error {
 	}
 	projectID := os.Getenv("INFISICAL_PROJECT_ID")
 	env := "dev"
-	path := "/"
+	path := secretsPath
+	if path == "" {
+		path = "/"
+	}
 	if projectID == "" {
 		return fmt.Errorf("INFISICAL_PROJECT_ID not set")
 	}
@@ -268,7 +272,10 @@ func machineGet(name string) error {
 	}
 	projectID := os.Getenv("INFISICAL_PROJECT_ID")
 	env := "dev"
-	path := "/"
+	path := secretsPath
+	if path == "" {
+		path = "/"
+	}
 	if projectID == "" {
 		return fmt.Errorf("INFISICAL_PROJECT_ID not set")
 	}
@@ -493,6 +500,8 @@ func init() {
 	secretsCmd.AddCommand(secretsSetupCmd)
 	secretsCmd.AddCommand(secretsStatusCmd)
 	secretsCmd.AddCommand(secretsLoginCmd)
+	secretsSetCmd.Flags().StringVar(&secretsPath, "path", "/", "Secret path in Infisical (default: /)")
+	secretsGetCmd.Flags().StringVar(&secretsPath, "path", "/", "Secret path in Infisical (default: /)")
 	secretsCmd.AddCommand(secretsSetCmd)
 	secretsCmd.AddCommand(secretsGetCmd)
 	secretsCmd.AddCommand(secretsExportCmd)

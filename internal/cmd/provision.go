@@ -178,11 +178,14 @@ Use --dry-run to preview without executing.`,
 		if !runStep("Configuring firewall", func() error {
 			firewallMode := getEnv("FIREWALL_MODE", "")
 			if firewallMode == "" {
-				// Default to "public" (SSH on port 22) for safety.
-				// tailscale-only mode blocks all SSH if Tailscale crashes,
-				// which can lock you out. Use tailscale-only only if you
-				// have a working Tailscale connection AND a console password.
-				firewallMode = "public"
+				if provisionMode == "prod" {
+					// Prod: tailscale-only (SSH only via Tailscale IPs).
+					// Requires working Tailscale + an admin user with SSH keys.
+					firewallMode = "tailscale-only"
+				} else {
+					// Dev: public (SSH on port 22) for convenience.
+					firewallMode = "public"
+				}
 			}
 			forceFw, _ := cmd.Flags().GetBool("force-firewall")
 			if forceFw {

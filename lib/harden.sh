@@ -115,6 +115,33 @@ fi
 
 fi
 
+# 0. Create admin user (non-root, for SSH access after hardening)
+# This prevents lockout: root SSH is disabled by hardening, so we need
+# a non-root admin user with SSH keys and passwordless sudo.
+ADMIN_USER="${ADMIN_USER:-admin}"
+if id "$ADMIN_USER" &>/dev/null; then
+  echo "[harden] Admin user '$ADMIN_USER' already exists"
+else
+  echo "[harden] Creating admin user '$ADMIN_USER'..."
+  useradd -m -s /bin/bash "$ADMIN_USER" 2>/dev/null || true
+  # Copy root's SSH authorized_keys to admin user
+  if [ -f /root/.ssh/authorized_keys ]; then
+    mkdir -p /home/$ADMIN_USER/.ssh
+    cp /root/.ssh/authorized_keys /home/$ADMIN_USER/.ssh/authorized_keys
+    chown -R $ADMIN_USER:$ADMIN_USER /home/$ADMIN_USER/.ssh
+    chmod 700 /home/$ADMIN_USER/.ssh
+    chmod 600 /home/$ADMIN_USER/.ssh/authorized_keys
+    echo "[harden] Copied SSH keys to $ADMIN_USER"
+  fi
+  # Add to sudo and sshusers groups
+  usermod -aG sudo "$ADMIN_USER" 2>/dev/null || true
+  usermod -aG sshusers "$ADMIN_USER" 2>/dev/null || true
+  # Passwordless sudo
+  echo "$ADMIN_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$ADMIN_USER
+  chmod 440 /etc/sudoers.d/$ADMIN_USER
+  echo "[harden] Admin user '$ADMIN_USER' created with sudo access"
+fi
+
 # 1. SSH hardening (sane defaults, idempotent)
 if should_run "ssh" && [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
   if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ] && grep -q "PermitRootLogin no" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null; then

@@ -173,12 +173,17 @@ Supported agents: ZCode, OpenCode (extensible to others).
 ### Secrets
 | Command | Description |
 |---|---|
-| `mf secrets status` | Show Infisical status |
+| `mf secrets status` | Show secrets backend status |
+| `mf secrets status --mode=personal` | Show Bitwarden status |
 | `mf secrets setup` | Set up Infisical (self-host or cloud) |
 | `mf secrets setup --self-host` | Self-host Infisical via Docker Compose |
 | `mf secrets login` | Login to Infisical interactively |
-| `mf secrets identity-create` | Create machine identity for non-interactive access |
-| `mf secrets export` | Export all secrets from Infisical |
+| `mf secrets identity-create` | Save machine identity to credentials file |
+| `mf secrets set KEY=val` | Set secret in Infisical |
+| `mf secrets get KEY` | Get secret from Infisical |
+| `mf secrets export` | Export all secrets as .env |
+| `mf secrets --mode=personal unlock` | Unlock Bitwarden vault |
+| `mf secrets --mode=personal get ITEM` | Get item from Bitwarden |
 
 ### Utilities
 | Command | Description |
@@ -199,10 +204,43 @@ Multi-OS via `lib/os/<family>.sh` modules:
 
 Adding a new OS is just adding a new file that implements the standard interface.
 
+## Environments
+
+Like Rails, mainframe supports multiple environments:
+
+- `mf apply` — dev environment (default)
+- `mf apply --env=prod` — production environment
+- `INFISICAL_ENV=prod mf apply` — via env var
+
+The environment determines which secrets are fetched from Infisical
+(dev vs prod), which packages are installed, and which hardening is applied.
+
 ## Modes
 
 - **dev** (default): Interactive, relaxed firewall, dev tools installed
 - **prod**: Hardened, tailscale-only, no public ports, k3s-ready
+
+## Machine Identity (for VPS/CI)
+
+For non-interactive secret access (VPS, CI/CD):
+
+    mf secrets identity-create
+
+This saves credentials to `~/.config/mainframe/infisical.env` (mode 600).
+`mf apply` auto-loads this file. No manual env vars needed.
+
+## Secrets Architecture
+
+Two tiers, cleanly separated:
+
+| Tier | Backend | Used By | In mainframe.yml |
+|---|---|---|---|
+| Machine | Infisical | mf apply, VPS, CI/CD | Yes |
+| Personal | Bitwarden/1Password | Humans only | No |
+
+Machine secrets (SSH keys, API tokens, env vars) live in Infisical.
+Personal secrets (web logins, credit cards) live in Bitwarden.
+mf manages Infisical; Bitwarden is a convenience wrapper.
 
 ## Secrets
 

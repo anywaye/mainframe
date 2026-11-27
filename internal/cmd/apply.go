@@ -19,6 +19,7 @@ var applyOnly string
 var applySkip string
 var applyList bool
 var applyMode string
+var applyEnv string
 var applyResume bool
 var applyVerbose int
 
@@ -186,17 +187,29 @@ WARNING: Do not run on production servers. Use 'mf setup --prod' for production.
 
 		os.Setenv("MAINFRAME_LIB", tmpDir)
 
-		// Determine mode
-		if applyMode == "" {
-			// Auto-detect from mainframe.yml
-			modeData, _ := os.ReadFile(filepath.Join(configDir, "mainframe.yml"))
-			if strings.Contains(string(modeData), "mode: prod") {
-				applyMode = "prod"
+		// Load Infisical credentials from file if env vars not set
+		loadInfisicalCredentials()
+
+		// Determine environment (--env takes priority, then --mode, then auto-detect)
+		if applyEnv != "" {
+			applyMode = applyEnv
+		} else if applyMode != "" {
+			// backward compat: --mode=prod/dev maps to env
+			applyMode = applyMode
+		} else {
+			// Auto-detect from mainframe.yml or env var
+			if envVar := os.Getenv("INFISICAL_ENV"); envVar != "" {
+				applyMode = envVar
 			} else {
-				applyMode = "dev"
+				modeData, _ := os.ReadFile(filepath.Join(configDir, "mainframe.yml"))
+				if strings.Contains(string(modeData), "mode: prod") {
+					applyMode = "prod"
+				} else {
+					applyMode = "dev"
+				}
 			}
 		}
-		fmt.Printf("=== Applying mainframe config from %s (mode: %s) ===\n", configDir, applyMode)
+		fmt.Printf("=== Applying mainframe config from %s (env: %s) ===\n", configDir, applyMode)
 		if applyDryRun {
 			fmt.Println("[DRY RUN - no changes will be made]")
 		}
@@ -278,7 +291,8 @@ func init() {
 	applyCmd.Flags().StringVar(&applyOnly, "only", "", "Run only these steps (comma-separated)")
 	applyCmd.Flags().StringVar(&applySkip, "skip", "", "Skip these steps (comma-separated)")
 	applyCmd.Flags().BoolVar(&applyList, "list", false, "List available steps")
-	applyCmd.Flags().StringVar(&applyMode, "mode", "", "Apply mode: dev or prod (default: auto-detect from mainframe.yml)")
+	applyCmd.Flags().StringVar(&applyEnv, "env", "", "Environment: dev or prod (default: auto-detect)")
+	applyCmd.Flags().StringVar(&applyMode, "mode", "", "Deprecated: use --env instead")
 	applyCmd.Flags().BoolVar(&applyResume, "resume", false, "Resume from previous interrupted run")
 	applyCmd.Flags().IntVarP(&applyVerbose, "verbose", "v", 0, "Verbose level (0=normal, 1=timing, 2=debug)")
 	rootCmd.AddCommand(applyCmd)

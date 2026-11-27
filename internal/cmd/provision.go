@@ -284,6 +284,8 @@ func loadEnv() {
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
 			}
+			// Strip optional "export " prefix
+			line = strings.TrimPrefix(line, "export ")
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) == 2 {
 				key := strings.TrimSpace(parts[0])

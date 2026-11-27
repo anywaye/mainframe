@@ -29,7 +29,8 @@ Like Rails provides the structure for web apps, Mainframe provides the structure
 
 - `mf new my-mainframe` scaffolds the structure
 - You fill in `packages.conf`, `shell/`, `editor/`, `mcp/`, etc.
-- `mf apply` reads your config and sets up any machine
+- `mf dev setup` sets up a dev machine (provision + apply)
+- `mf prod setup` sets up a production server (provision only)
 - `mf capture` scans a machine and generates config
 
 **The framework provides the structure and logic. The user provides the content.**

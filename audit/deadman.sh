@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 # mainframe deadman: automatic rollback of SSH / firewall / sudo / PAM config unless disarmed.
 #
-#   mainframe-deadman arm [MINUTES] [--ip ADDR]
+#   mf deadman arm [MINUTES] [--ip ADDR]
 #                                     snapshot config now, roll back in MINUTES (default 5). The
 #                                     rollback also unbans ADDR in fail2ban (default: the SSH
 #                                     client address of this session)
-#   mainframe-deadman extend MINUTES  still armed and need more time before the test: move the
+#   mf deadman extend MINUTES  still armed and need more time before the test: move the
 #                                     rollback to MINUTES from now. Same snapshot; never use it to
 #                                     keep a change whose test login failed
-#   mainframe-deadman disarm          the change works: cancel the rollback. Exits 3 (and prints
+#   mf deadman disarm          the change works: cancel the rollback. Exits 3 (and prints
 #                                     ROLLED BACK) if a rollback already ran since arm: then the
 #                                     changes were NOT kept
-#   mainframe-deadman status          show timer and snapshots
-#   mainframe-deadman restore [DIR]   roll back now (to DIR, else the armed snapshot, else the latest)
-#   mainframe-deadman snapshot        take a snapshot without arming
-#   mainframe-deadman client-ip       print the address of this session's SSH client (works under
+#   mf deadman status          show timer and snapshots
+#   mf deadman restore [DIR]   roll back now (to DIR, else the armed snapshot, else the latest)
+#   mf deadman snapshot        take a snapshot without arming
+#   mf deadman client-ip       print the address of this session's SSH client (works under
 #                                     sudo); exits 1 outside an SSH session
 #
 # Typical use around a risky change:
-#   mainframe-deadman arm 5 → change sshd/ufw → test from a NEW connection → mainframe-deadman disarm
+#   mf deadman arm 5 → change sshd/ufw → test from a NEW connection → mainframe-deadman disarm
 # The test must bypass SSH multiplexing, or it reuses the old connection and proves nothing:
-#   ssh -o ControlPath=none -o BatchMode=yes -p <port> <admin>@<host> 'sudo -n mainframe-deadman disarm'
+#   ssh -o ControlPath=none -o BatchMode=yes -p <port> <admin>@<host> 'sudo -n mf deadman disarm'
 # (NOPASSWD sudo; for password sudo see references/ssh.md "Test and disarm")
 # If the new connection fails, do nothing: the timer restores the snapshot, reloads ssh and
 # restores the previous ufw state. Existing SSH sessions survive (ssh.service uses KillMode=process).
@@ -28,7 +28,7 @@
 # reboots while armed, the rollback runs at boot instead.
 #
 # Install once (must be a file on disk, not piped):
-#   install -m 755 deadman.sh /usr/local/sbin/mainframe-deadman
+#   install -m 755 deadman.sh /usr/local/sbin/mainframe-deadman  (or use: mf deadman)
 # Part of mainframe (MIT).
 
 set -uo pipefail
@@ -90,7 +90,7 @@ lock() { # seconds to wait
   flock -w "$1" 9
 }
 report_running() {
-  echo "deadman: ROLLBACK IN PROGRESS: the timer already fired. Your changes are being reverted; check 'mainframe-deadman status' in a minute." >&2
+  echo "deadman: ROLLBACK IN PROGRESS: the timer already fired. Your changes are being reverted; check 'mf deadman status' in a minute." >&2
 }
 report_rollback() {
   local when
@@ -430,18 +430,18 @@ case "$cmd" in
     else ip=$(client_ip) || ip=""; fi
     [[ "$min" =~ ^[0-9]+$ ]] && (( min >= 1 && min <= 120 )) || die "MINUTES must be 1..120"
     [[ "$SKIP_SERVICES" == 1 || -d /run/systemd/system ]] || die "systemd is not running; cannot schedule a rollback"
-    lock 10 || die "another mainframe-deadman command is running; try again"
+    lock 10 || die "another mf deadman command is running; try again"
     if is_armed; then
       die "already armed. Disarm first (re-arming would snapshot a possibly broken state)"
     fi
     if restore_running; then
-      die "a rollback is running right now; wait for it to finish ('mainframe-deadman status')"
+      die "a rollback is running right now; wait for it to finish ('mf deadman status')"
     fi
     if boot_restore_pending; then
-      die "the previous arm's rollback has not run yet (the server rebooted while armed; $BOOT_UNIT rolls back to $(basename "$(cat "$STATE/armed" 2>/dev/null)")). Wait for it ('mainframe-deadman status'), or keep the current config with 'mainframe-deadman disarm'"
+      die "the previous arm's rollback has not run yet (the server rebooted while armed; $BOOT_UNIT rolls back to $(basename "$(cat "$STATE/armed" 2>/dev/null)")). Wait for it ('mf deadman status'), or keep the current config with 'mf deadman disarm'"
     fi
     self=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)
-    [[ -n "$self" && -f "$self" ]] || die "run from an installed file (install -m 755 deadman.sh /usr/local/sbin/mainframe-deadman), not via a pipe"
+    [[ -n "$self" && -f "$self" ]] || die "run from an installed file (install -m 755 deadman.sh /usr/local/sbin/mainframe-deadman  (or use: mf deadman)), not via a pipe"
     if [[ -f /var/run/reboot-required ]]; then
       log "NOTE: a reboot is pending. Don't reboot while armed: the change would be rolled back at boot"
     fi
@@ -474,13 +474,13 @@ case "$cmd" in
       --on-active="${min}m" --timer-property=AccuracySec=1s \
       /bin/bash "$STATE/bin/deadman.sh" restore --armed "$dir" || { rm -f "$STATE/armed-at"; remove_boot_unit; die "systemd-run failed"; }
     at=$(date -d "+${min} min" +%H:%M:%S 2>/dev/null || echo "in ${min} min")
-    log "ARMED: rollback at $at unless you run 'mainframe-deadman disarm' (snapshot $(basename "$dir"); $boot_note; $ip_note)"
+    log "ARMED: rollback at $at unless you run 'mf deadman disarm' (snapshot $(basename "$dir"); $boot_note; $ip_note)"
     ;;
   extend)
     need_root
     min=${1:-}
     [[ "$min" =~ ^[0-9]+$ ]] && (( min >= 1 && min <= 120 )) || die "usage: extend MINUTES (1..120)"
-    lock 10 || die "another mainframe-deadman command is running; NOT extended. Try again"
+    lock 10 || die "another mf deadman command is running; NOT extended. Try again"
     if rolled_back_since_arm; then report_rollback; exit 3; fi
     if restore_running; then report_running; exit 3; fi
     is_armed || die "not armed: nothing to extend"
@@ -501,13 +501,13 @@ case "$cmd" in
       restore "$dir"; exit 1
     fi
     at=$(date -d "+${min} min" +%H:%M:%S 2>/dev/null || echo "in ${min} min")
-    log "EXTENDED: rollback at $at unless you run 'mainframe-deadman disarm' (snapshot $(basename "$dir"))"
+    log "EXTENDED: rollback at $at unless you run 'mf deadman disarm' (snapshot $(basename "$dir"))"
     ;;
   disarm)
     need_root
     # a long rollback holds the lock: report it (exit 3) rather than "try again"
     if restore_running; then report_running; exit 3; fi
-    lock 30 || die "another mainframe-deadman command is running; NOT disarmed. Try again"
+    lock 30 || die "another mf deadman command is running; NOT disarmed. Try again"
     # Never stop a running restore: a half-swapped /etc/ssh is worse than either state.
     if rolled_back_since_arm; then report_rollback; exit 3; fi
     if restore_running; then report_running; exit 3; fi
@@ -555,8 +555,8 @@ case "$cmd" in
       fi
       restore "$2"; exit
     fi
-    restore_running && die "a rollback is running right now; wait for it to finish ('mainframe-deadman status')"
-    lock 60 || die "another mainframe-deadman command is running; try again"
+    restore_running && die "a rollback is running right now; wait for it to finish ('mf deadman status')"
+    lock 60 || die "another mf deadman command is running; try again"
     dir=${1:-}
     [[ -n "$dir" ]] || dir=$(cat "$STATE/armed-snapshot" 2>/dev/null)
     [[ -n "$dir" ]] || dir=$(readlink -f "$STATE/latest" 2>/dev/null)
@@ -565,7 +565,7 @@ case "$cmd" in
     ;;
   snapshot)
     need_root
-    lock 30 || die "another mainframe-deadman command is running; try again"
+    lock 30 || die "another mf deadman command is running; try again"
     dir=$(snapshot) || exit 1
     log "snapshot saved: $dir"
     ;;

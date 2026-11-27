@@ -306,7 +306,7 @@ fi
 # 8. Deadman switch
 if should_run "deadman" && [ "$HARDEN_DEADMAN" = "true" ]; then
   if [ -f "$AUDIT_DIR/deadman.sh" ]; then
-    install -m 755 "$AUDIT_DIR/deadman.sh" /usr/local/sbin/mainframe-deadman 2>/dev/null || true
+    install -m 755 "$AUDIT_DIR/deadman.sh" /usr/local/sbin/mainframe-deadman  # invoked via: mf deadman 2>/dev/null || true
     echo "[harden] Deadman installed"
   fi
 fi

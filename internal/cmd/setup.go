@@ -35,7 +35,7 @@ hardening — no dev tools, no editor config, no MCP servers.`,
 		if setupDev {
 			fmt.Println("=== Dev Setup ===")
 			fmt.Println("Step 1/2: Provisioning (dev mode)...")
-			provisionCmd.SetArgs([]string{"--mode", "dev"})
+			provisionMode = "dev"
 			if err := provisionCmd.RunE(provisionCmd, []string{}); err != nil {
 				return fmt.Errorf("provision failed: %w", err)
 			}
@@ -50,7 +50,7 @@ hardening — no dev tools, no editor config, no MCP servers.`,
 		} else {
 			fmt.Println("=== Prod Setup ===")
 			fmt.Println("Provisioning (prod mode)...")
-			provisionCmd.SetArgs([]string{"--mode", "prod"})
+			provisionMode = "prod"
 			if err := provisionCmd.RunE(provisionCmd, []string{}); err != nil {
 				return fmt.Errorf("provision failed: %w", err)
 			}
@@ -58,7 +58,7 @@ hardening — no dev tools, no editor config, no MCP servers.`,
 			// Apply prod config if prod: directory exists
 			if _, err := os.Stat("prod"); err == nil {
 				fmt.Println("\nApplying prod config...")
-				applyCmd.SetArgs([]string{"--mode", "prod"})
+				applyMode = "prod"
 				if err := applyCmd.RunE(applyCmd, []string{}); err != nil {
 					return fmt.Errorf("apply failed: %w", err)
 				}

@@ -83,7 +83,9 @@ case "$FIREWALL_MODE" in
   tailscale-only)
     ufw allow 41641/udp comment 'Tailscale'
     ufw allow from 100.64.0.0/10 to any port 22 comment 'SSH via Tailscale'
-    echo "[firewall] Mode: tailscale-only (no public ports)"
+    # Break-glass: always allow public SSH on port 22 as emergency fallback
+    ufw allow 22/tcp comment 'SSH (break-glass, always open)'
+    echo "[firewall] Mode: tailscale-only (SSH via Tailscale + break-glass on 22)"
     ;;
   public)
     ufw allow 80/tcp comment 'HTTP'
@@ -152,3 +154,15 @@ sysctl -w net.ipv4.conf.default.rp_filter=2 >/dev/null 2>&1 || true
 
 ufw --force enable
 echo "[firewall] Firewall enabled"
+
+# Post-enable verification: ensure SSH is still accessible
+sleep 2
+if ss -tlnp 2>/dev/null | grep -q ':22 '; then
+  echo "[firewall] SSH port 22 is listening: OK"
+else
+  echo "[firewall] WARNING: SSH port 22 is NOT listening after firewall enable!"
+  echo "[firewall] Disabling firewall to prevent lockout..."
+  ufw disable
+  echo "[firewall] Firewall disabled for safety. Fix manually, then re-enable."
+  exit 1
+fi

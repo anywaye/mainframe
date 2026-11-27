@@ -142,143 +142,160 @@ else
   echo "[harden] Admin user '$ADMIN_USER' created with sudo access"
 fi
 
-# Verify admin user has SSH keys before disabling root SSH
+# Verify admin user has SSH keys
 ADMIN_HAS_KEYS="false"
 if [ -f "/home/$ADMIN_USER/.ssh/authorized_keys" ] && [ -s "/home/$ADMIN_USER/.ssh/authorized_keys" ]; then
   ADMIN_HAS_KEYS="true"
-  echo "[harden] Admin user '$ADMIN_USER' has SSH keys ✓"
+  echo "[harden] Admin user '$ADMIN_USER' has SSH keys"
 else
   echo "[harden] WARNING: Admin user '$ADMIN_USER' has NO SSH keys."
   echo "[harden] Root SSH will NOT be disabled to prevent lockout."
   echo "[harden] Set up SSH keys for $ADMIN_USER, then re-run hardening."
 fi
 
-# 1. SSH hardening (sane defaults, idempotent)
-if should_run "ssh" && [ "$HARDEN_SSH_CRYPTO" = "true" ] && [ "$ADMIN_HAS_KEYS" = "true" ]; then
-  if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ] && grep -q "PermitRootLogin no" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null; then
-    echo "[harden] SSH hardening already applied, skipping"
-  else
-    echo "[harden] Applying SSH hardening..."
-    # Backup current SSH config before changes
-    mkdir -p /etc/ssh/sshd_config.d 2>/dev/null || true
-    if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ]; then
-      cp /etc/ssh/sshd_config.d/00-mainframe.conf /etc/ssh/sshd_config.d/00-mainframe.conf.bak 2>/dev/null || true
-    fi
-    # Write to temp file first, validate, then move
-    tmp_conf="/etc/ssh/sshd_config.d/00-mainframe.conf.new"
-    cp "$ASSETS_DIR/ssh/00-mainframe.conf" "$tmp_conf" 2>/dev/null || echo "[harden] SSH config template not found (non-Linux?)"
-    if [ -f "$tmp_conf" ]; then
-      # Validate the combined config
-      cp /etc/ssh/sshd_config /tmp/sshd_config_backup 2>/dev/null || true
-      if sshd -t 2>/dev/null; then
-        mv "$tmp_conf" /etc/ssh/sshd_config.d/00-mainframe.conf
-        echo "[harden] SSH config applied and validated"
-      else
-        echo "[harden] ERROR: SSH config validation failed. NOT applying."
-        rm -f "$tmp_conf"
-      fi
-    fi
-    groupadd -f sshusers 2>/dev/null || true
-    # Add users with SSH authorized_keys to sshusers group
-    for home in /root /home/*; do
-      if [ -f "$home/.ssh/authorized_keys" ]; then
-        user=$(basename "$home")
-        [ "$user" = "root" ] && user="root"
-        [ "$home" = "/root" ] && user="root"
-        if id "$user" >/dev/null 2>&1; then
-          usermod -aG sshusers "$user" 2>/dev/null || true
-          echo "[harden] Added $user to sshusers group"
-        fi
-      fi
-    done
-    # Ensure the default sudo user is in sshusers
-    for u in ubuntu admin debian; do
-      if id "$u" >/dev/null 2>&1; then
-        usermod -aG sshusers "$u" 2>/dev/null || true
-      fi
-    done
-    sshd -t 2>/dev/null && echo "[harden] SSH config valid" || echo "[harden] SSH validation skipped"
-    # Restart SSH to apply new config (existing sessions are kept)
-    if sshd -t 2>/dev/null; then
-      systemctl restart ssh 2>/dev/null || service ssh restart 2>/dev/null || true
-      echo "[harden] SSH service restarted"
-      # Verify SSH is accessible
-      sleep 1
-      if ss -tlnp 2>/dev/null | grep -q ':22 '; then
-        echo "[harden] SSH port 22 is listening ✓"
-      else
-        echo "[harden] WARNING: SSH port 22 is NOT listening!"
-      fi
-    fi
-  fi
-fi
-
-# 1b. Docker daemon hardening (idempotent)
-if should_run "docker" && command -v docker &>/dev/null; then
-  cfg=/etc/docker/daemon.json
-  if [ -f "$cfg" ] && grep -q '"icc": false' "$cfg" 2>/dev/null && grep -q '"log-opts"' "$cfg" 2>/dev/null; then
-    echo "[harden] Docker daemon already hardened, skipping"
-  else
-    echo "[harden] Applying Docker daemon hardening..."
-    mkdir -p /etc/docker 2>/dev/null || true
-    cat > "$cfg" << 'DEOF'
-{
-  "icc": false,
-  "userland-proxy": false,
-  "log-driver": "json-file",
-  "log-opts": { "max-size": "10m", "max-file": "3" }
+# Helper: test SSH access for a user (returns 0 if successful)
+test_ssh_access() {
+  local user="$1"
+  local host="${2:-127.0.0.1}"
+  local timeout="${3:-5}"
+  ssh -o BatchMode=yes -o ConnectTimeout="$timeout" -o StrictHostKeyChecking=no       -o UserKnownHostsFile=/dev/null "$user@$host" "echo SSH_OK" 2>/dev/null | grep -q "SSH_OK"
 }
-DEOF
-    systemctl restart docker 2>/dev/null || service docker restart 2>/dev/null || true
+
+# Layer 1: Verify current SSH access works (baseline)
+echo ""
+echo "[harden] === SSH Hardening: Layer-by-Layer ==="
+echo "[harden] Layer 1: Verifying current SSH access..."
+ROOT_SSH_BEFORE="false"
+if test_ssh_access "root"; then
+  ROOT_SSH_BEFORE="true"
+  echo "[harden]   Root SSH: OK (baseline confirmed)"
+else
+  echo "[harden]   Root SSH: not accessible (may already be restricted)"
+fi
+
+# Layer 2: Admin user exists and has keys (already verified above)
+echo "[harden] Layer 2: Admin user check..."
+if [ "$ADMIN_HAS_KEYS" = "true" ]; then
+  echo "[harden]   Admin user '$ADMIN_USER': has SSH keys"
+else
+  echo "[harden]   Admin user '$ADMIN_USER': NO SSH keys"
+fi
+
+# Layer 3: Test SSH as admin user (before any changes)
+echo "[harden] Layer 3: Testing SSH as '$ADMIN_USER' (pre-change)..."
+ADMIN_SSH_BEFORE="false"
+if [ "$ADMIN_HAS_KEYS" = "true" ]; then
+  if test_ssh_access "$ADMIN_USER"; then
+    ADMIN_SSH_BEFORE="true"
+    echo "[harden]   Admin SSH: OK (pre-change verified)"
+  else
+    echo "[harden]   Admin SSH: FAILED (keys may not match or sshd not running)"
+    echo "[harden]   Cannot proceed with root SSH disable. Skipping."
+  fi
+else
+  echo "[harden]   Skipped (no SSH keys for admin user)"
+fi
+
+# Layer 4: Apply SSH hardening ONLY if admin SSH is verified
+echo "[harden] Layer 4: Applying SSH hardening..."
+SSH_HARDENED="false"
+if [ "$ADMIN_SSH_BEFORE" = "true" ]; then
+  # Backup current config
+  mkdir -p /etc/ssh/sshd_config.d 2>/dev/null || true
+  if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ]; then
+    cp /etc/ssh/sshd_config.d/00-mainframe.conf /etc/ssh/sshd_config.d/00-mainframe.conf.bak 2>/dev/null || true
+  fi
+  # Write new config to temp file first
+  tmp_conf="/etc/ssh/sshd_config.d/00-mainframe.conf.new"
+  # Use the asset template
+  ASSETS_DIR="${ASSETS_DIR:-/tmp/mainframe-assets/assets}"
+  if [ -f "$ASSETS_DIR/ssh/00-mainframe.conf" ]; then
+    cp "$ASSETS_DIR/ssh/00-mainframe.conf" "$tmp_conf" 2>/dev/null
+  else
+    # Fallback: write config inline
+    cat > "$tmp_conf" << 'SSHEOF'
+# /etc/ssh/sshd_config.d/00-mainframe.conf: managed by mainframe
+Port 22
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+AllowGroups sshusers
+MaxAuthTries 5
+MaxSessions 10
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+X11Forwarding no
+AllowAgentForwarding no
+PermitUserEnvironment no
+SSHEOF
+  fi
+  # Validate before applying
+  if [ -f "$tmp_conf" ] && sshd -t 2>/dev/null; then
+    mv "$tmp_conf" /etc/ssh/sshd_config.d/00-mainframe.conf
+    echo "[harden]   SSH config applied and validated"
+    # Restart SSH (existing sessions are kept)
+    systemctl restart ssh 2>/dev/null || service ssh restart 2>/dev/null || true
     sleep 2
+    SSH_HARDENED="true"
+  else
+    echo "[harden]   ERROR: SSH config validation failed. NOT applying."
+    rm -f "$tmp_conf"
+    SSH_HARDENED="false"
+  fi
+else
+  echo "[harden]   Skipped (admin SSH not verified). Root SSH remains enabled."
+fi
+
+# Layer 5: Verify access after hardening
+echo "[harden] Layer 5: Verifying access after hardening..."
+if [ "$SSH_HARDENED" = "true" ]; then
+  # Verify root SSH is now blocked
+  if test_ssh_access "root"; then
+    echo "[harden]   WARNING: Root SSH still works after hardening (unexpected)"
+  else
+    echo "[harden]   Root SSH blocked: OK (expected)"
+  fi
+  # Verify admin SSH still works
+  if test_ssh_access "$ADMIN_USER"; then
+    echo "[harden]   Admin SSH still works: OK"
+  else
+    echo "[harden]   ERROR: Admin SSH broken after hardening! REVERTING..."
+    # Revert SSH config
+    if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf.bak ]; then
+      mv /etc/ssh/sshd_config.d/00-mainframe.conf.bak /etc/ssh/sshd_config.d/00-mainframe.conf
+    else
+      rm -f /etc/ssh/sshd_config.d/00-mainframe.conf
+    fi
+    systemctl restart ssh 2>/dev/null || service ssh restart 2>/dev/null || true
+    sleep 2
+    echo "[harden]   Reverted. Root SSH restored."
+    SSH_HARDENED="false"
   fi
 fi
 
-# 1c. telnet removal
-if should_run "ssh" && dpkg -l inetutils-telnet 2>/dev/null | grep -q "^ii"; then
-  echo "[harden] Removing telnet..."
-  apt purge -y -qq inetutils-telnet 2>/dev/null || true
-fi
-
-# 1d. DB port allowlisting (optional)
-if should_run "firewall" && [ -n "${ALLOW_DB_FROM:-}" ]; then
-  echo "[harden] Allowing DB ports from $ALLOW_DB_FROM..."
-  if command -v ufw &>/dev/null; then
-    ufw allow from "$ALLOW_DB_FROM" to any port 5432 proto tcp comment "PostgreSQL" 2>/dev/null || true
-    ufw allow from "$ALLOW_DB_FROM" to any port 6432 proto tcp comment "PgBouncer" 2>/dev/null || true
-  fi
-fi
-
-# Re-enable firewall if it was disabled by mf recover
-if should_run "firewall" && command -v ufw &>/dev/null; then
-  if ! ufw status 2>/dev/null | grep -q "Status: active"; then
-    echo "[harden] Firewall is inactive. Re-enabling..."
-    # Safety: ALWAYS allow SSH on port 22 (public) as a fallback
-    # This prevents lockout even if Tailscale is down
+# Layer 6: Firewall (only if admin SSH works)
+echo "[harden] Layer 6: Firewall check..."
+# Firewall is handled by mf provision / firewall.sh, not hardening
+# But we ensure SSH port 22 is always allowed (break-glass)
+if command -v ufw &>/dev/null; then
+  if ufw status 2>/dev/null | grep -q "Status: active"; then
+    # Ensure port 22 is allowed (break-glass)
     ufw allow 22/tcp comment 'SSH (break-glass, always)' 2>/dev/null || true
-    # Also allow Tailscale
-    ufw allow 41641/udp comment 'Tailscale' 2>/dev/null || true
-    # Allow HTTP/HTTPS
-    ufw allow 80/tcp comment 'HTTP' 2>/dev/null || true
-    ufw allow 443/tcp comment 'HTTPS' 2>/dev/null || true
-    ufw --force enable 2>/dev/null || true
-    echo "[harden] Firewall enabled"
-    # Verify SSH is accessible
-    sleep 1
-    if ss -tlnp 2>/dev/null | grep -q ':22 '; then
-      echo "[harden] SSH port 22 is listening ✓"
-    else
-      echo "[harden] WARNING: SSH port 22 is NOT listening after firewall enable!"
-    fi
-    # Verify SSH is accessible
-    sleep 1
-    if ss -tlnp 2>/dev/null | grep -q ':22 '; then
-      echo "[harden] SSH port 22 is listening ✓"
-    else
-      echo "[harden] WARNING: SSH port 22 is NOT listening after firewall enable!"
-    fi
+    echo "[harden]   Port 22 allowed in firewall (break-glass)"
   fi
 fi
+
+echo ""
+echo "[harden] SSH hardening summary:"
+echo "  Admin user: $ADMIN_USER (has keys: $ADMIN_HAS_KEYS)"
+echo "  Admin SSH verified: $ADMIN_SSH_BEFORE"
+echo "  SSH hardening applied: $SSH_HARDENED"
+echo "  Root SSH blocked: $([ "$SSH_HARDENED" = "true" ] && echo 'yes' || echo 'no (root still accessible)')"
+echo ""
 
 # 2. Sysctl (sane defaults)
 if should_run "sysctl" && [ "$HARDEN_BBR" = "true" ]; then

@@ -63,8 +63,16 @@ secrets_status() {
     fi
   fi
 
-  # Fallback: check if user get works
-  if infisical user get --domain="$INFISICAL_HOST" 2>/dev/null | grep -qi "profile\|email\|organization"; then
+  # Check if we can list secrets (interactive login via profile)
+  if [ -n "${INFISICAL_PROJECT_ID:-}" ]; then
+    if infisical secrets --env="${INFISICAL_ENV:-dev}" --projectId="$INFISICAL_PROJECT_ID" --domain="$INFISICAL_HOST" --silent 2>/dev/null | grep -qi "SECRET NAME\|SECRET VALUE"; then
+      echo "authenticated (interactive)"
+      return 0
+    fi
+  fi
+
+  # Fallback: try infisical secrets without project (will use .infisical.json if present)
+  if infisical secrets --domain="$INFISICAL_HOST" --silent 2>/dev/null | grep -qi "SECRET NAME\|SECRET VALUE"; then
     echo "authenticated (interactive)"
     return 0
   fi

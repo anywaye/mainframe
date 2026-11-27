@@ -21,12 +21,10 @@ func Execute() error {
 func init() {
 	rootCmd.Version = version
 	rootCmd.AddCommand(provisionCmd)
-	rootCmd.AddCommand(mcpCmd)
 	rootCmd.AddCommand(auditCmd)
-	rootCmd.AddCommand(hardenCmd)
 	rootCmd.AddCommand(newCmd)
-	rootCmd.AddCommand(lockCmd)
 	rootCmd.AddCommand(versionCmd)
+	// mcpCmd, hardenCmd, lockCmd, etc. are registered in their own init() functions
 }
 
 var versionCmd = &cobra.Command{

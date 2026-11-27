@@ -469,6 +469,53 @@ var secretsPubKeyCmd = &cobra.Command{
 	},
 }
 
+// --- setup Infisical (optional broker) ---
+
+var secretsSetupInfisicalCmd = &cobra.Command{
+	Use:   "setup-infisical",
+	Short: "Set up Infisical for agent secret brokering (self-hosted)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Install Infisical CLI if needed
+		if _, err := exec.LookPath("infisical"); err != nil {
+			fmt.Println("Installing Infisical CLI...")
+			if _, err := exec.LookPath("brew"); err == nil {
+				exec.Command("brew", "install", "infisical/get-cli/infisical").Run()
+			} else {
+				// Linux
+				exec.Command("bash", "-c", "curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.deb.sh' | bash").Run()
+				exec.Command("apt-get", "install", "-y", "infisical").Run()
+			}
+		}
+
+		// Create docker-compose for self-hosted Infisical
+		home, _ := os.UserHomeDir()
+		infisicalDir := filepath.Join(home, "infisical")
+		os.MkdirAll(infisicalDir, 0755)
+
+		composePath := filepath.Join(infisicalDir, "docker-compose.yml")
+		if _, err := os.Stat(composePath); err != nil {
+			encKey := "change-me"
+			authSecret := "change-me"
+			if out, err := exec.Command("openssl", "rand", "-hex", "16").Output(); err == nil {
+				encKey = strings.TrimSpace(string(out))
+			}
+			if out, err := exec.Command("openssl", "rand", "-hex", "32").Output(); err == nil {
+				authSecret = strings.TrimSpace(string(out))
+			}
+
+			composeContent := "version: \"3.8\"\nservices:\n  infisical:\n    image: infisical/infisical:latest\n    ports:\n      - \"8080:8080\"\n    environment:\n      - ENCRYPTION_KEY=" + encKey + "\n      - AUTH_SECRET=" + authSecret + "\n      - DB_CONNECTION_URI=postgres://infisical:infisical@db:5432/infisical\n      - REDIS_URL=redis://redis:6379\n    depends_on:\n      - db\n      - redis\n    restart: unless-stopped\n\n  db:\n    image: postgres:15-alpine\n    environment:\n      - POSTGRES_USER=infisical\n      - POSTGRES_PASSWORD=infisical\n      - POSTGRES_DB=infisical\n    volumes:\n      - infisical-db:/var/lib/postgresql/data\n    restart: unless-stopped\n\n  redis:\n    image: redis:7-alpine\n    restart: unless-stopped\n\nvolumes:\n  infisical-db:\n"
+			os.WriteFile(composePath, []byte(composeContent), 0644)
+			fmt.Printf("Created %s\n", composePath)
+		}
+
+		fmt.Println("Infisical setup complete.")
+		fmt.Println("  Start: cd ~/infisical && docker compose up -d")
+		fmt.Println("  Then: mf secrets push-infisical (to sync local secrets)")
+		fmt.Println("  UI: http://localhost:8080")
+		return nil
+	},
+}
+
 // --- push to Infisical (optional broker) ---
 
 var secretsPushInfisicalCmd = &cobra.Command{
@@ -766,6 +813,7 @@ func init() {
 	secretsCmd.AddCommand(secretsSyncCmd)
 	secretsCmd.AddCommand(secretsPeersCmd)
 	secretsCmd.AddCommand(secretsPubKeyCmd)
+	secretsCmd.AddCommand(secretsSetupInfisicalCmd)
 	secretsCmd.AddCommand(secretsPushInfisicalCmd)
 	secretsCmd.AddCommand(personalSetupCmd)
 	secretsCmd.AddCommand(personalStatusCmd)

@@ -314,6 +314,21 @@ func applyChatsConfig(dryRun bool) {
 		return
 	}
 
+	// Step 0: Install sqlite3 if not available (needed for chat DB operations)
+	runShellStep("install sqlite3", `
+		if command -v sqlite3 &>/dev/null; then
+			echo "  sqlite3: already installed ($(sqlite3 --version | head -1))"
+		elif command -v apt-get &>/dev/null; then
+			echo "  Installing sqlite3 via apt..."
+			apt-get install -y -qq sqlite3 2>&1 | tail -1
+		elif command -v brew &>/dev/null; then
+			echo "  Installing sqlite3 via Homebrew..."
+			brew install sqlite3 2>&1 | tail -2
+		else
+			echo "  Warning: sqlite3 not found and no package manager available"
+		fi
+	`)
+
 	// Step 1: Install MinIO if not available
 	runShellStep("install minio", `
 		if command -v minio &>/dev/null; then

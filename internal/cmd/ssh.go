@@ -92,7 +92,7 @@ var sshVerifyCmd = &cobra.Command{
 
 		// Check SSH daemon
 		fmt.Print("[1/6] SSH daemon... ")
-		out, err := exec.Command("systemctl", "is-active", "ssh").Output()
+		out, err := exec.Command("sudo", "systemctl", "is-active", "ssh").Output()
 		if err != nil || strings.TrimSpace(string(out)) != "active" {
 			fmt.Println("NOT RUNNING")
 			errors++
@@ -148,7 +148,7 @@ var sshVerifyCmd = &cobra.Command{
 
 		// Check iptables
 		fmt.Print("[6/6] Port 22 in firewall... ")
-		out, _ = exec.Command("bash", "-c", "if iptables -L INPUT -n 2>/dev/null | head -1 | grep -q 'policy ACCEPT'; then echo allowed; elif iptables -L INPUT -n 2>/dev/null | grep -q 'dpt:22\\|dport 22'; then echo allowed; elif ufw status 2>/dev/null | grep -q '22/tcp.*ALLOW'; then echo allowed; else echo blocked; fi").Output()
+		out, _ = exec.Command("bash", "-c", "if sudo iptables -L INPUT -n 2>/dev/null | head -1 | grep -q 'policy ACCEPT'; then echo allowed; elif sudo iptables -L INPUT -n 2>/dev/null | grep -q 'dpt:22\\|dport 22'; then echo allowed; elif sudo ufw status 2>/dev/null | grep -q '22/tcp.*ALLOW'; then echo allowed; else echo blocked; fi").Output()
 		result := strings.TrimSpace(string(out))
 		if result == "allowed" {
 			fmt.Println("allowed")
@@ -179,7 +179,7 @@ var sshRecoverCmd = &cobra.Command{
 		os.Remove("/etc/ssh/sshd_config.d/00-mainframe.conf")
 		os.WriteFile("/etc/ssh/sshd_config.d/00-recovery.conf", []byte("PasswordAuthentication yes\nPermitRootLogin yes\nAuthenticationMethods any\n"), 0644)
 		exec.Command("sshd", "-t").Run()
-		exec.Command("systemctl", "reload", "ssh").Run()
+		exec.Command("sudo", "systemctl", "reload", "ssh").Run()
 		fmt.Println("  Done")
 
 		// Ensure break-glass key is in authorized_keys
@@ -210,12 +210,12 @@ var sshRecoverCmd = &cobra.Command{
 		fmt.Println("[3/5] Disabling firewall...")
 		exec.Command("ufw", "disable").Run()
 		// Also add iptables rule as backup
-		exec.Command("iptables", "-A", "INPUT", "-p", "tcp", "--dport", "22", "-j", "ACCEPT").Run()
+		exec.Command("sudo", "iptables", "-A", "INPUT", "-p", "tcp", "--dport", "22", "-j", "ACCEPT").Run()
 		fmt.Println("  Done")
 
 		// Restart SSH
 		fmt.Println("[4/5] Restarting SSH...")
-		exec.Command("systemctl", "restart", "ssh").Run()
+		exec.Command("sudo", "systemctl", "restart", "ssh").Run()
 		fmt.Println("  Done")
 
 		// Show status

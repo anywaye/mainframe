@@ -1,3 +1,42 @@
+## [0.20.0] - 2026-11-27
+
+### Added
+- `mf chats` command group for peer-to-peer agent chat sync
+  - `mf chats pull [fleet]` — idempotent pull from all reachable fleet machines
+  - `mf chats push [fleet]` — push local chats to all reachable fleet machines
+  - `mf chats status [fleet]` — per-machine sync status
+  - `mf chats list` — list all chat sessions across agents (ZCode, OpenCode)
+  - `mf chats daemon start/stop/status` — manage sync daemon
+- Chat sync storage backend (MinIO + Litestream)
+  - `storage/backend.conf` — MinIO endpoint, bucket, credentials
+  - `storage/s3-adapter.sh` — generic S3/MinIO operations
+  - `storage/litestream-adapter.sh` — SQLite replication via Litestream
+  - `storage/sync-daemon.sh` — continuous sync daemon (MinIO + Litestream + file watcher)
+  - `storage/launchd/` and `storage/systemd/` — daemon configs for macOS/Linux
+- Per-agent chat adapters (ZCode, OpenCode) with capture/restore/watch
+- GPG key sync from password manager (fetch, import, configure git signing)
+- OpenCode agent support (install, config sync, chat sync)
+- `mf apply` step 19: chat sync infrastructure (MinIO, Litestream, mc, sqlite3)
+- `mf fleet sync` and `mf fleet apply` now trigger `mf chats pull` on each machine
+- SQLite database merge on pull (INSERT OR IGNORE) instead of skipping existing files
+- `mf chats list` handles missing sessions/tasks tables gracefully
+- Embedded secrets backends in binary (fixes SSH/GPG key fetch)
+- Chat sync under `agents/<name>/chats/` namespace for extensibility
+
+### Fixed
+- Shell scripts: `return 0` → `exit 0` (scripts run via `bash -c`)
+- `.gitignore`: `secrets/` → `/secrets/` (was ignoring `lib/secrets/`)
+- OpenCode install command (was using wrong npm package name)
+- OpenCode data directory config (now uses global `~/.opencode/`)
+- Fleet sync SSH command (removed `mf chats pull` from remote machines)
+- known_hosts: added dev-mf host key for fleet connectivity
+- Dotfiles migration: all `~/.dotfiles` references → mainframe paths
+- Default git branch changed to `master`
+
+### Changed
+- `mf apply` step count: 18 → 19 (added chats step)
+- `mf apply ssh-keys` and `gpg-keys` now work gracefully when vault is locked
+
 # Changelog
 
 ## [0.16.0] - 2026-11-26

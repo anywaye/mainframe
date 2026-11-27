@@ -58,7 +58,7 @@ hardening — no dev tools, no editor config, no MCP servers.`,
 			// Apply prod config if prod: directory exists
 			if _, err := os.Stat("prod"); err == nil {
 				fmt.Println("\nApplying prod config...")
-				applyMode = "prod"
+				applyMode = "prod"  // used as env value
 				if err := applyCmd.RunE(applyCmd, []string{}); err != nil {
 					return fmt.Errorf("apply failed: %w", err)
 				}

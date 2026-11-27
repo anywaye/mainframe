@@ -55,6 +55,7 @@ var secretsSetupCmd = &cobra.Command{
 }
 
 func machineSetup() error {
+	loadInfisicalCredentials()
 	if _, err := exec.LookPath("infisical"); err != nil {
 		fmt.Println("Infisical CLI not found. Installing...")
 		if _, err := exec.LookPath("brew"); err == nil {
@@ -147,7 +148,33 @@ var secretsStatusCmd = &cobra.Command{
 	},
 }
 
+
+func loadInfisicalCredentials() {
+	home, _ := os.UserHomeDir()
+	credFile := filepath.Join(home, ".config", "mainframe", "infisical.env")
+	data, err := os.ReadFile(credFile)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			// Only set if not already in env
+			if os.Getenv(key) == "" {
+				os.Setenv(key, val)
+			}
+		}
+	}
+}
+
 func machineStatus() error {
+	loadInfisicalCredentials()
 	if _, err := exec.LookPath("infisical"); err != nil {
 		fmt.Println("Infisical CLI: not installed")
 		fmt.Println("  Install: mf secrets setup")
@@ -221,6 +248,7 @@ var secretsSetCmd = &cobra.Command{
 }
 
 func machineSet(args []string) error {
+	loadInfisicalCredentials()
 	host := os.Getenv("INFISICAL_HOST")
 	if host == "" {
 		host = "http://localhost:8080"
@@ -266,6 +294,7 @@ var secretsGetCmd = &cobra.Command{
 }
 
 func machineGet(name string) error {
+	loadInfisicalCredentials()
 	host := os.Getenv("INFISICAL_HOST")
 	if host == "" {
 		host = "http://localhost:8080"
@@ -290,6 +319,7 @@ var secretsExportCmd = &cobra.Command{
 	Use:   "export [env]",
 	Short: "Export all machine secrets as .env format",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		loadInfisicalCredentials()
 		if isPersonalMode() {
 			fmt.Println("Export is only available in machine mode (Infisical).")
 			return nil
@@ -322,11 +352,38 @@ var secretsIdentityCreateCmd = &cobra.Command{
 			fmt.Println("Identity creation is only available in machine mode (Infisical).")
 			return nil
 		}
-		fmt.Println("Machine identities are created in the Infisical web UI or via API.")
-		fmt.Println("  Web UI: Infisical → Settings → Machine Identities → Create")
-		fmt.Println("  Then set env vars on the target machine:")
-		fmt.Println("    export INFISICAL_CLIENT_ID=<client-id>")
-		fmt.Println("    export INFISICAL_CLIENT_SECRET=<client-secret>")
+		loadInfisicalCredentials()
+		fmt.Println("Machine Identity Setup")
+		fmt.Println("=====================")
+		fmt.Println()
+		fmt.Println("1. Open Infisical web UI → Settings → Machine Identities → Create")
+		fmt.Println("2. Copy the Client ID and Client Secret")
+		fmt.Println()
+		fmt.Print("Enter Client ID: ")
+		var clientID string
+		fmt.Scanln(&clientID)
+		fmt.Print("Enter Client Secret: ")
+		var clientSecret string
+		fmt.Scanln(&clientSecret)
+		fmt.Print("Enter Infisical Host (default: http://localhost:8080): ")
+		var host string
+		fmt.Scanln(&host)
+		if host == "" {
+			host = "http://localhost:8080"
+		}
+		fmt.Print("Enter Project ID: ")
+		var projectID string
+		fmt.Scanln(&projectID)
+
+		// Save to credentials file
+		home, _ := os.UserHomeDir()
+		credDir := filepath.Join(home, ".config", "mainframe")
+		os.MkdirAll(credDir, 0755)
+		credFile := filepath.Join(credDir, "infisical.env")
+		content := fmt.Sprintf("INFISICAL_HOST=%s\nINFISICAL_PROJECT_ID=%s\nINFISICAL_CLIENT_ID=%s\nINFISICAL_CLIENT_SECRET=%s\n", host, projectID, clientID, clientSecret)
+		os.WriteFile(credFile, []byte(content), 0600)
+		fmt.Printf("\nCredentials saved to %s (mode 600)\n", credFile)
+		fmt.Println("mf apply will now auto-load these credentials.")
 		return nil
 	},
 }

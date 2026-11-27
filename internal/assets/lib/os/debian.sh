@@ -75,13 +75,14 @@ install_gh() {
   echo "[debian] gh installed"
 }
 
-install_bw() {
-  if command -v bw &>/dev/null; then
-    echo "[debian] bw already installed"
+install_infisical() {
+  if command -v infisical &>/dev/null; then
+    echo "[debian] infisical already installed"
     return 0
   fi
-  npm install -g @bitwarden/cli 2>&1 | tail -1
-  echo "[debian] Bitwarden CLI installed"
+  curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.deb.sh' 2>/dev/null | bash -s -- -y 2>&1 | tail -2
+  apt-get install -y -qq infisical 2>&1 | tail -1
+  echo "[debian] Infisical CLI installed"
 }
 
 install_osv_scanner() {
@@ -118,7 +119,7 @@ install_one() {
     node) install_node "${ver:-22}" ;;
     helm) install_helm "v${ver:-4.3.0}" ;;
     gh) install_gh ;;
-    bw) install_bw ;;
+    infisical) install_infisical ;;
     osv-scanner) install_osv_scanner ;;
     postgresql-client|psql) install_postgresql_client ;;
     python3|python3-venv|uv) install_python ;;

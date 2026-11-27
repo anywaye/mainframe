@@ -18,7 +18,7 @@ type FleetMachine struct {
 	Host       string         `yaml:"host"`    // "local" or "user@host"
 	OS         string         `yaml:"os"`      // macos, ubuntu-24.04, debian-12, etc.
 	Mode       string         `yaml:"mode"`    // dev or prod
-	SSHKey     string         `yaml:"ssh_key"` // Bitwarden item name for SSH key
+	SSHKey     string         `yaml:"ssh_key"` // Infisical secret name for SSH key
 	Sandboxes  *SandboxConfig `yaml:"sandboxes"` // override fleet-level setting
 }
 

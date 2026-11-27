@@ -101,7 +101,7 @@ func applySSHKeys(dryRun bool) {
 	}
 	runShellStep("fetch ssh keys", `
 		# Source secrets backend
-		SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
+		SECRETS_BACKEND="infisical"
 		_backend=""
 		for _p in "lib/secrets.sh" "$MAINFRAME_LIB/secrets.sh" "/usr/local/lib/mainframe/lib/secrets.sh"; do
 			if [ -f "$_p" ]; then _backend="$_p"; break; fi
@@ -125,7 +125,7 @@ func applySSHKeys(dryRun bool) {
 		keys_conf="ssh/keys.conf"
 		if [ ! -f "$keys_conf" ]; then
 			echo "  No ssh/keys.conf found. Skipping SSH key fetch."
-			echo "  Create ssh/keys.conf with: <bitwarden_item_name>:<path>"
+			echo "  Create ssh/keys.conf with: <infisical_secret_name>:<path>"
 			exit 0
 		fi
 
@@ -144,17 +144,14 @@ func applySSHKeys(dryRun bool) {
 			fi
 			echo "  Fetching: $item_name -> $key_path"
 			mkdir -p "$(dirname "$key_path")"
-			secrets_get_note "$item_name" 2>/dev/null | python3 -c "
-import sys, re
-notes = sys.stdin.read()
-match = re.search(r'-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----', notes, re.DOTALL)
-if match:
-    with open('$key_path', 'w') as f:
-        f.write(match.group(0) + chr(10))
-    print('  Written to $key_path')
-else:
-    print('  No private key found in notes')
-" 2>/dev/null
+			# Infisical stores the key value directly
+			key_value=$(secrets_get_value "$item_name" 2>/dev/null)
+			if [ -n "$key_value" ]; then
+				echo "$key_value" > "$key_path"
+				echo "  Written to $key_path"
+			else
+				echo "  No secret value found for $item_name"
+			fi
 			if [ -f "$key_path" ]; then
 				chmod 600 "$key_path"
 				echo "  Permissions set: 600"
@@ -164,37 +161,43 @@ else:
 	`)
 }
 
-// applySecrets unlocks the secrets vault and stores the session.
+// applySecrets checks Infisical authentication and machine identity.
 func applySecrets(dryRun bool) {
-	fmt.Println("\n[8a/18] Managing secrets vault...")
+	fmt.Println("\n[8a/18] Managing Infisical secrets...")
 	if dryRun {
-		fmt.Println("  [dry-run] Would check/unlock secrets vault")
+		fmt.Println("  [dry-run] Would check Infisical authentication")
 		return
 	}
 	runShellStep("secrets status", `
-		SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
-		if [ "$SECRETS_BACKEND" = "bitwarden" ]; then
-			if ! command -v bw &>/dev/null; then
-				echo "  Bitwarden CLI not found. Skipping."
-				exit 0
+		# Source infisical backend
+		SECRETS_BACKEND="infisical"
+		_backend=""
+		for _p in "lib/secrets.sh" "$MAINFRAME_LIB/secrets.sh" "/usr/local/lib/mainframe/lib/secrets.sh"; do
+			if [ -f "$_p" ]; then _backend="$_p"; break; fi
+		done
+		if [ -n "$_backend" ]; then source "$_backend"; fi
+
+		if ! type secrets_available &>/dev/null || ! secrets_available 2>/dev/null; then
+			echo "  Infisical CLI not found. Installing..."
+			secrets_install 2>&1 | tail -3
+		fi
+
+		status=$(secrets_status 2>/dev/null || echo "unknown")
+		echo "  Infisical status: $status"
+
+		if [ "$status" = "unauthenticated" ] || [ "$status" = "unconfigured" ] || [ "$status" = "unavailable" ]; then
+			echo "  Infisical not configured. Run 'mf secrets setup' to configure."
+			echo "  Or set INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET env vars."
+		elif [ "$status" = "authenticated (machine identity)" ] || [ "$status" = "authenticated (interactive)" ]; then
+			echo "  Infisical authenticated."
+		fi
+
+		# Check config from mainframe.yml
+		if [ -f "mainframe.yml" ]; then
+			infisical_host=$(grep -A2 "backend: infisical" mainframe.yml | grep "host:" | sed 's/.*host: *//' | tr -d ' ' || echo "")
+			if [ -n "$infisical_host" ]; then
+				echo "  Infisical host: $infisical_host"
 			fi
-			status=$(timeout 5 bw status 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown")
-			echo "  Bitwarden status: $status"
-			if [ "$status" = "unauthenticated" ]; then
-				echo "  Not logged in. Run 'bw login <email>' to enable."
-			elif [ "$status" = "locked" ]; then
-				echo "  Vault is locked. Run 'mf secrets unlock' to unlock."
-			elif [ "$status" = "unlocked" ]; then
-				echo "  Vault is unlocked."
-				# Check if session file exists
-				if [ -f "$HOME/.config/bitwarden/session" ]; then
-					echo "  Session file: exists"
-				else
-					echo "  Session file: not found. Run 'mf secrets unlock' to create."
-				fi
-			fi
-		else
-			echo "  Backend: $SECRETS_BACKEND (not yet implemented)"
 		fi
 	`)
 }
@@ -212,7 +215,7 @@ func applyGPGKeys(dryRun bool) {
 	}
 	runShellStep("fetch gpg keys", `
 		# Source secrets backend
-		SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
+		SECRETS_BACKEND="infisical"
 		_backend=""
 		for _p in "lib/secrets.sh" "$MAINFRAME_LIB/secrets.sh" "/usr/local/lib/mainframe/lib/secrets.sh"; do
 			if [ -f "$_p" ]; then _backend="$_p"; break; fi
@@ -246,8 +249,8 @@ func applyGPGKeys(dryRun bool) {
 			[ -z "$line" ] && continue
 			item_name="$line"
 			echo "  Fetching: $item_name"
-			# Get the GPG private key from Bitwarden notes and import
-			key_data=$(secrets_get_note "$item_name" 2>/dev/null)
+			# Get the GPG private key from Infisical and import
+			key_data=$(secrets_get_value "$item_name" 2>/dev/null)
 			if [ -n "$key_data" ]; then
 				echo "$key_data" | gpg --batch --import 2>&1 | tail -2
 				# Extract the key ID for git config

@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
-# Generic secrets management dispatcher.
-# Sources the appropriate backend module based on SECRETS_BACKEND.
-# Supported backends: bitwarden, 1password, infisical, env
+# Secrets management dispatcher.
+# Infisical is the ONLY secrets backend for mainframe.
 set -euo pipefail
 
-SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
+SECRETS_BACKEND="infisical"
 
-# Source the backend module
-_backend_module="$(dirname "${BASH_SOURCE[0]}")/secrets/${SECRETS_BACKEND}.sh"
+# Source the infisical backend module
+_backend_module="$(dirname "${BASH_SOURCE[0]}")/secrets/infisical.sh"
 if [ -f "$_backend_module" ]; then
   source "$_backend_module"
 else
-  echo "[secrets] Backend '$_SECRETS_BACKEND' not supported. Available: bitwarden, 1password, infisical, env" >&2
-  # Fall back to env backend
-  source "$(dirname "${BASH_SOURCE[0]}")/secrets/env.sh"
+  echo "[secrets] Infisical backend module not found at $_backend_module" >&2
+  exit 1
 fi
 
-# Generic interface (implemented by each backend):
-#   secrets_available()  - returns 0 if backend CLI is installed
-#   secrets_status()     - prints: unauthenticated, locked, unlocked
-#   secrets_get_note(name) - prints the note content of an item
-#   secrets_get_field(name, field) - prints a specific field value
+# Generic interface (implemented by infisical backend):
+#   secrets_available()     - returns 0 if infisical CLI is installed
+#   secrets_install()       - installs infisical CLI
+#   secrets_status()        - prints: unauthenticated, authenticated, unavailable
+#   secrets_authenticate()  - authenticates via machine identity or interactive login
+#   secrets_get_value(name) - prints the secret value
+#   secrets_get_note(name)  - prints the secret value (alias for get_value)
+#   secrets_get_field(name, field) - prints a specific field (convention: NAME_FIELD)
+#   secrets_export_all()    - exports all secrets as dotenv
+#   secrets_unlock_hint()   - prints setup instructions

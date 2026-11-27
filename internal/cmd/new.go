@@ -120,7 +120,10 @@ hardening:
   fail2ban: true
 
 secrets:
-  backend: bitwarden
+  backend: infisical
+  host: "http://localhost:8080"
+  project: "mainframe"
+  environment: "dev"
 
 packages: packages.conf
 runtimes: runtimes.conf
@@ -246,8 +249,11 @@ const envTemplate = `# Environment variables for mainframe.
 # GitHub (required for cloning repos and pushing)
 # export GH_TOKEN="ghp_..."
 
-# Bitwarden (optional, for secret management)
-# export BW_EMAIL="your@email.com"
+# Infisical (secret management)
+# export INFISICAL_HOST="http://localhost:8080"
+# export INFISICAL_PROJECT_ID="your-project-id"
+# export INFISICAL_CLIENT_ID="your-client-id"
+# export INFISICAL_CLIENT_SECRET="your-client-secret"
 
 # VPS name (default: mainframe)
 # export VPS_NAME="mainframe"
@@ -311,8 +317,8 @@ for dir in shell git editor terminal; do
 done
 
 # Pull secrets
-if command -v bw &>/dev/null; then
-    bw sync 2>/dev/null || true
+if command -v infisical &>/dev/null; then
+    echo "Infisical CLI available. Run 'mf secrets login' to authenticate."
 fi
 
 echo "=== Sync complete ==="
@@ -340,7 +346,7 @@ configs:
   mcp: common
   dotfiles: true
 secrets:
-  provider: bitwarden
+  provider: infisical
   items: []
 repos: []
 `

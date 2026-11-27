@@ -144,9 +144,14 @@ var secretsStatusCmd = &cobra.Command{
 			fmt.Println("Machine identity: not configured (run 'infisical login' for interactive)")
 		}
 
-		// Check interactive login
-		out, err := exec.Command("infisical", "user", "get", "--domain="+host).Output()
-		if err == nil && strings.Contains(string(out), "email") {
+		// Check interactive login by listing secrets
+		secretArgs := []string{"secrets", "--env=dev", "--domain=" + host, "--silent"}
+		if projectID != "" {
+			secretArgs = append(secretArgs, "--projectId="+projectID)
+		}
+		cmdErr := exec.Command("infisical", secretArgs...).Run()
+		_ = cmdErr
+		if cmdErr == nil {
 			fmt.Println("Interactive login: authenticated")
 		} else {
 			fmt.Println("Interactive login: not authenticated")

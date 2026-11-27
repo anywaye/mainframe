@@ -7,7 +7,7 @@ Supports both **dev** and **prod** modes.
 
 ```sh
 # Install the mf CLI
-curl -fsSL https://get.mainframe.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anywaye/mainframe/master/install.sh | bash
 
 # Create a new config repo
 mf new my-mainframe
@@ -43,7 +43,7 @@ The framework grows with you. As your tools change, your config changes. As the 
 | | Framework (`anywaye/mainframe`) | Config (`your-org/mainframe`) |
 |---|---|---|
 | **What** | CLI tool + OS provisioning engine | Your personal configuration |
-| **Installed via** | `curl -fsSL https://get.mainframe.sh \| bash` | `mf init <url>` |
+| **Installed via** | `curl -fsSL https://raw.githubusercontent.com/anywaye/mainframe/master/install.sh | bash` | `mf init <url>` |
 | **Edited by** | Framework maintainers | You |
 | **Contains** | Go code, shell scripts, templates | YAML, JSON, shell configs, dotfiles |
 | **OS-specific** | `lib/os/<family>.sh` (provisioning logic) | `os/<family>.sh` (your preferences, optional) |

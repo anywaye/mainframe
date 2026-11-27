@@ -50,6 +50,18 @@ The framework grows with you. As your tools change, your config changes. As the 
 
 The framework is installed once. The config repo is cloned per-machine. The framework reads the config repo and applies it.
 
+## Base + environment-specific pattern
+
+Mainframe follows the **base + environment-specific** pattern used by Terraform, Helm, Docker Compose, and Ansible:
+
+- `packages.conf` — base packages (all machines)
+- `packages.dev.conf` — dev-only packages (optional, only applied in dev mode)
+- `packages.prod.conf` — prod-only packages (optional, only applied in prod mode)
+- `mcp/`, `skills/`, `shell/`, etc. — dev config (only applied via `mf apply`)
+- `mainframe.yml` has `dev:` and `prod:` sections for environment-specific config
+
+The framework provides the merge logic; the user provides the content.
+
 ## Config repo structure
 
 ```
@@ -81,17 +93,23 @@ Every directory is optional. The framework applies what's there, skips what's no
 
 ## Commands
 
-### Provisioning
+### Setup (recommended)
+| Command | Description |
+|---|---|
+| `mf dev setup` | Full dev machine setup (provision + apply) |
+| `mf prod setup` | Production server setup (provision only) |
+
+### Provisioning (advanced)
 | Command | Description |
 |---|---|
 | `mf provision` | Provision a VPS (dev mode, default) |
 | `mf provision --mode prod` | Provision a production server |
 | `mf provision --dry-run` | Preview without executing |
 
-### Configuration
+### Configuration (advanced)
 | Command | Description |
 |---|---|
-| `mf apply` | Apply config to current machine |
+| `mf apply` | Apply dev config to current machine |
 | `mf apply --dry-run` | Preview without applying |
 | `mf apply --host user@host` | Apply to remote machine |
 | `mf capture` | Scan current machine → generate config |

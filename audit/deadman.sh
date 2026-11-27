@@ -345,14 +345,6 @@ restore() { # snapshot-dir
     fi
     if systemctl restart ssh 2>/dev/null || systemctl start ssh 2>/dev/null; then
       log "ssh (re)started (existing sessions are kept)"
-      # Verify SSH is actually accessible
-      sleep 2
-      if ss -tlnp 2>/dev/null | grep -q ':22 '; then
-        log "SSH verification: port 22 is listening ✓"
-      else
-        log "WARNING: SSH port 22 is NOT listening after restart!"
-        log "WARNING: Try: systemctl restart ssh && systemctl restart ssh.socket"
-      fi
     else
       log "WARNING: ssh did not start; check 'journalctl -u ssh' via the provider console"
     fi

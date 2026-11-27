@@ -68,7 +68,7 @@ reboot required, backup failure, heartbeat lost. External uptime check: <UptimeR
 ## Maintenance cheatsheet
 
 ```bash
-sudo mainframe-deadman arm 5      # before touching ssh/ufw; 'disarm' after testing a NEW session
+sudo mf deadman arm 5      # before touching ssh/ufw; 'disarm' after testing a NEW session
 sudo ufw status numbered
 sudo fail2ban-client status sshd
 systemctl list-timers

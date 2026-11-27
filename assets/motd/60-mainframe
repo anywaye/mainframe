@@ -23,8 +23,8 @@ if [[ -r /var/lib/update-notifier/updates-available ]]; then
 fi
 failed=$(t systemctl --failed --no-legend --plain | awk '{print $1}' | paste -sd' ' -)
 [[ -n "$failed" ]] && warns+=("${r}failed: $failed${n}")
-systemctl is-active --quiet mainframe-deadman.timer 2>/dev/null && \
-  [[ "$(systemctl show -p SubState --value mainframe-deadman.timer 2>/dev/null)" == waiting ]] && warns+=("${r}deadman ARMED${n}")
+systemctl is-active --quiet mf deadman.timer 2>/dev/null && \
+  [[ "$(systemctl show -p SubState --value mf deadman.timer 2>/dev/null)" == waiting ]] && warns+=("${r}deadman ARMED${n}")
 
 info=()
 if command -v fail2ban-client >/dev/null && [[ $EUID -eq 0 ]]; then

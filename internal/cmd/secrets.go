@@ -184,20 +184,30 @@ var secretsIdentityCreateCmd = &cobra.Command{
 	Long: `Create a machine identity in Infisical for non-interactive secret access.
 This is used for VPSes, CI/CD, and automated deployments.
 
-After creating, set the env vars:
-  export INFISICAL_CLIENT_ID=<client-id>
-  export INFISICAL_CLIENT_SECRET=<client-secret>`,
+Machine identities allow mf apply to run without interactive login.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("Machine identities are created in the Infisical web UI.")
-		fmt.Println("  1. Open Infisical → Settings → Machine Identities")
-		fmt.Println("  2. Create a new identity with Universal Auth")
-		fmt.Println("  3. Assign it to your project with read access")
-		fmt.Println("  4. Copy the Client ID and Client Secret")
-		fmt.Println("  5. Set env vars on the target machine:")
-		fmt.Println("     export INFISICAL_CLIENT_ID=<client-id>")
-		fmt.Println("     export INFISICAL_CLIENT_SECRET=<client-secret>")
+		host := os.Getenv("INFISICAL_HOST")
+		if host == "" {
+			host = "http://localhost:8080"
+		}
+		fmt.Println("Creating machine identity via Infisical API...")
+		fmt.Printf("  Infisical host: %s\n", host)
 		fmt.Println()
-		fmt.Println("  For persistent storage, add to ~/.zshenv or /etc/mainframe/infisical.env")
+		fmt.Println("Machine identities require the Infisical web UI or API.")
+		fmt.Println("  Web UI: Open Infisical → Settings → Machine Identities → Create")
+		fmt.Println("  Or use the API:")
+		fmt.Println("    1. Create identity: POST /api/v1/identities")
+		fmt.Println("    2. Attach universal auth: POST /api/v1/auth/universal-auth/identities/{id}")
+		fmt.Println("    3. Copy the Client ID and Client Secret (shown once)")
+		fmt.Println()
+		fmt.Println("Then set on the target machine:")
+		fmt.Println("  export INFISICAL_CLIENT_ID=<client-id>")
+		fmt.Println("  export INFISICAL_CLIENT_SECRET=<client-secret>")
+		fmt.Println()
+		fmt.Println("For persistent storage:")
+		fmt.Println("  echo 'export INFISICAL_CLIENT_ID=...' >> ~/.zshenv")
+		fmt.Println("  echo 'export INFISICAL_CLIENT_SECRET=...' >> ~/.zshenv")
+		fmt.Println("  # Or for system-wide: /etc/mainframe/infisical.env")
 		return nil
 	},
 }
@@ -232,6 +242,64 @@ var secretsExportCmd = &cobra.Command{
 	},
 }
 
+var secretsSetCmd = &cobra.Command{
+	Use:   "set NAME=VALUE",
+	Short: "Set a secret in Infisical",
+	Args:  cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		host := os.Getenv("INFISICAL_HOST")
+		if host == "" {
+			host = "http://localhost:8080"
+		}
+		projectID := os.Getenv("INFISICAL_PROJECT_ID")
+		env := "dev"
+		path := "/"
+		if projectID == "" {
+			return fmt.Errorf("INFISICAL_PROJECT_ID not set")
+		}
+		for _, arg := range args {
+			parts := strings.SplitN(arg, "=", 2)
+			if len(parts) != 2 {
+				fmt.Printf("Invalid format: %s (expected NAME=VALUE)\n", arg)
+				continue
+			}
+			name, value := parts[0], parts[1]
+			fmt.Printf("Setting %s...\n", name)
+			setCmd := exec.Command("infisical", "secrets", "set", name+"="+value,
+				"--path="+path, "--env="+env, "--projectId="+projectID, "--domain="+host)
+			setCmd.Stdout = os.Stdout
+			setCmd.Stderr = os.Stderr
+			if err := setCmd.Run(); err != nil {
+				fmt.Printf("  Failed: %v\n", err)
+			}
+		}
+		return nil
+	},
+}
+
+var secretsGetCmd = &cobra.Command{
+	Use:   "get NAME",
+	Short: "Get a secret from Infisical",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		host := os.Getenv("INFISICAL_HOST")
+		if host == "" {
+			host = "http://localhost:8080"
+		}
+		projectID := os.Getenv("INFISICAL_PROJECT_ID")
+		env := "dev"
+		path := "/"
+		if projectID == "" {
+			return fmt.Errorf("INFISICAL_PROJECT_ID not set")
+		}
+		getCmd := exec.Command("infisical", "secrets", "get", args[0],
+			"--path="+path, "--env="+env, "--projectId="+projectID, "--domain="+host, "--plain", "--silent")
+		getCmd.Stdout = os.Stdout
+		getCmd.Stderr = os.Stderr
+		return getCmd.Run()
+	},
+}
+
 func init() {
 	secretsSetupCmd.Flags().StringVar(&secretsSetupHost, "host", "", "Use existing Infisical instance URL")
 	secretsSetupCmd.Flags().BoolVar(&secretsSetupSelfHost, "self-host", false, "Self-host Infisical via Docker Compose")
@@ -241,5 +309,7 @@ func init() {
 	secretsCmd.AddCommand(secretsLoginCmd)
 	secretsCmd.AddCommand(secretsIdentityCreateCmd)
 	secretsCmd.AddCommand(secretsExportCmd)
+	secretsCmd.AddCommand(secretsSetCmd)
+	secretsCmd.AddCommand(secretsGetCmd)
 	rootCmd.AddCommand(secretsCmd)
 }

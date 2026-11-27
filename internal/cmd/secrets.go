@@ -16,31 +16,23 @@ var secretsCmd = &cobra.Command{
 	Long: `Manage secrets for machine and personal use.
 
 Modes:
-  --machine (default)  Machine secrets via Infisical (SSH keys, API tokens, env vars)
-  --personal           Personal secrets via Bitwarden (web logins, credit cards, TOTP)
+  --mode=machine (default)  Machine secrets via Infisical (SSH keys, API tokens, env vars)
+  --mode=personal           Personal secrets via Bitwarden (web logins, credit cards, TOTP)
 
 Machine secrets are used by 'mf apply' and stored in Infisical.
 Personal secrets are for human use and stored in a password manager.
 
 Examples:
   mf secrets status                    # Infisical status
-  mf secrets --personal status        # Bitwarden status
+  mf secrets --mode=personal status   # Bitwarden status
   mf secrets set KEY=val               # Set secret in Infisical
-  mf secrets --personal get "GitHub"   # Get item from Bitwarden
+  mf secrets --mode=personal get "GitHub"  # Get item from Bitwarden
   mf secrets export > .env            # Export all machine secrets as .env`,
 }
 
 var secretsMode string
-var secretsPersonal bool
-var secretsMachine bool
 
 func isPersonalMode() bool {
-	if secretsPersonal {
-		return true
-	}
-	if secretsMachine {
-		return false
-	}
 	return secretsMode == "personal"
 }
 
@@ -493,8 +485,6 @@ var secretsListCmd = &cobra.Command{
 
 func init() {
 	secretsCmd.PersistentFlags().StringVar(&secretsMode, "mode", "machine", "Secrets mode: machine (Infisical) or personal (Bitwarden/1Password)")
-	secretsCmd.PersistentFlags().BoolVar(&secretsPersonal, "personal", false, "Use personal secrets mode (Bitwarden)")
-	secretsCmd.PersistentFlags().BoolVar(&secretsMachine, "machine", false, "Use machine secrets mode (Infisical)")
 
 	secretsSetupCmd.Flags().StringVar(&secretsSetupHost, "host", "", "Use existing Infisical instance URL")
 	secretsSetupCmd.Flags().BoolVar(&secretsSetupSelfHost, "self-host", false, "Self-host Infisical via Docker Compose")

@@ -357,7 +357,7 @@ var fleetApplyCmd = &cobra.Command{
 			} else {
 				// Apply via SSH
 				fmt.Printf("  Applying via SSH to %s...\n", m.Host)
-				sshCmd := exec.Command("ssh", m.Host, "cd ~/.mainframe 2>/dev/null || cd ~/mainframe 2>/dev/null; mf apply && mf chats pull "+fleetName)
+				sshCmd := exec.Command("ssh", m.Host, "cd ~/.mainframe 2>/dev/null || cd ~/mainframe 2>/dev/null; mf apply")
 				sshCmd.Stdout = os.Stdout
 				sshCmd.Stderr = os.Stderr
 				if err := sshCmd.Run(); err != nil {
@@ -507,7 +507,7 @@ var fleetSyncCmd = &cobra.Command{
 
 			fmt.Printf("  [%d] %s (%s): syncing...\n", i+1, m.Name, m.Host)
 			sshCmd := exec.Command("ssh", "-o", "ConnectTimeout=10", m.Host,
-				"cd ~/.mainframe 2>/dev/null && git pull --rebase && mf apply && mf chats pull "+fleetName)
+				"cd ~/.mainframe 2>/dev/null && git pull --rebase && mf apply")
 			sshCmd.Stdout = os.Stdout
 			sshCmd.Stderr = os.Stderr
 			if err := sshCmd.Run(); err != nil {

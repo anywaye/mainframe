@@ -118,7 +118,7 @@ fi
 # 0. Create admin user (non-root, for SSH access after hardening)
 # This prevents lockout: root SSH is disabled by hardening, so we need
 # a non-root admin user with SSH keys and passwordless sudo.
-ADMIN_USER="${ADMIN_USER:-admin}"
+ADMIN_USER="${ADMIN_USER:-ubuntu}"
 if id "$ADMIN_USER" &>/dev/null; then
   echo "[harden] Admin user '$ADMIN_USER' already exists"
 else
@@ -142,8 +142,19 @@ else
   echo "[harden] Admin user '$ADMIN_USER' created with sudo access"
 fi
 
+# Verify admin user has SSH keys before disabling root SSH
+ADMIN_HAS_KEYS="false"
+if [ -f "/home/$ADMIN_USER/.ssh/authorized_keys" ] && [ -s "/home/$ADMIN_USER/.ssh/authorized_keys" ]; then
+  ADMIN_HAS_KEYS="true"
+  echo "[harden] Admin user '$ADMIN_USER' has SSH keys ✓"
+else
+  echo "[harden] WARNING: Admin user '$ADMIN_USER' has NO SSH keys."
+  echo "[harden] Root SSH will NOT be disabled to prevent lockout."
+  echo "[harden] Set up SSH keys for $ADMIN_USER, then re-run hardening."
+fi
+
 # 1. SSH hardening (sane defaults, idempotent)
-if should_run "ssh" && [ "$HARDEN_SSH_CRYPTO" = "true" ]; then
+if should_run "ssh" && [ "$HARDEN_SSH_CRYPTO" = "true" ] && [ "$ADMIN_HAS_KEYS" = "true" ]; then
   if [ -f /etc/ssh/sshd_config.d/00-mainframe.conf ] && grep -q "PermitRootLogin no" /etc/ssh/sshd_config.d/00-mainframe.conf 2>/dev/null; then
     echo "[harden] SSH hardening already applied, skipping"
   else

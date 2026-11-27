@@ -179,9 +179,21 @@ Use --dry-run to preview without executing.`,
 			firewallMode := getEnv("FIREWALL_MODE", "")
 			if firewallMode == "" {
 				if provisionMode == "prod" {
-					// Prod: tailscale-only (SSH only via Tailscale IPs).
-					// Requires working Tailscale + an admin user with SSH keys.
-					firewallMode = "tailscale-only"
+					// Check if admin user has SSH keys before using tailscale-only
+					adminUser := getEnv("ADMIN_USER", "ubuntu")
+					adminKeys := false
+					if data, err := os.ReadFile("/home/" + adminUser + "/.ssh/authorized_keys"); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+						adminKeys = true
+					}
+					if adminKeys {
+						// Prod: tailscale-only (SSH only via Tailscale IPs).
+						firewallMode = "tailscale-only"
+					} else {
+						// No SSH keys for admin user: use public mode to prevent lockout
+						logMsg("  WARNING: Admin user %s has no SSH keys. Using public firewall mode.", adminUser)
+						logMsg("  Set up SSH keys, then re-run with FIREWALL_MODE=tailscale-only")
+						firewallMode = "public"
+					}
 				} else {
 					// Dev: public (SSH on port 22) for convenience.
 					firewallMode = "public"

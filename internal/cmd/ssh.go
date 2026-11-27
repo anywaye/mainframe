@@ -29,7 +29,8 @@ var sshKeygenCmd = &cobra.Command{
 			name = "breakglass"
 		}
 
-		keyPath := filepath.Join("/root/.ssh", name)
+		home, _ := os.UserHomeDir()
+		keyPath := filepath.Join(home, ".ssh", name)
 		fmt.Printf("=== Generating SSH key: %s ===\n", name)
 
 		// Check if key already exists
@@ -56,7 +57,8 @@ var sshKeygenCmd = &cobra.Command{
 		// Add to authorized_keys if emergency
 		if emergency {
 			pubKey, _ := os.ReadFile(keyPath + ".pub")
-			akPath := "/root/.ssh/authorized_keys"
+			home, _ := os.UserHomeDir()
+		akPath := filepath.Join(home, ".ssh", "authorized_keys")
 			// Append with break-glass comment
 			f, err := os.OpenFile(akPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 			if err != nil {
@@ -110,7 +112,8 @@ var sshVerifyCmd = &cobra.Command{
 
 		// Check authorized_keys
 		fmt.Print("[3/6] authorized_keys... ")
-		akPath := "/root/.ssh/authorized_keys"
+		home, _ := os.UserHomeDir()
+		akPath := filepath.Join(home, ".ssh", "authorized_keys")
 		data, err := os.ReadFile(akPath)
 		if err != nil || len(strings.TrimSpace(string(data))) == 0 {
 			fmt.Println("EMPTY OR MISSING")
@@ -182,9 +185,11 @@ var sshRecoverCmd = &cobra.Command{
 		// Ensure break-glass key is in authorized_keys
 		if keyName != "" {
 			fmt.Printf("[2/5] Ensuring break-glass key '%s' is in authorized_keys...\n", keyName)
-			keyPath := filepath.Join("/root/.ssh", keyName+".pub")
+			home, _ := os.UserHomeDir()
+			keyPath := filepath.Join(home, ".ssh", keyName+".pub")
 			if pubKey, err := os.ReadFile(keyPath); err == nil {
-				akPath := "/root/.ssh/authorized_keys"
+				home, _ := os.UserHomeDir()
+		akPath := filepath.Join(home, ".ssh", "authorized_keys")
 				content, _ := os.ReadFile(akPath)
 				if !strings.Contains(string(content), strings.TrimSpace(string(pubKey))) {
 					f, _ := os.OpenFile(akPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)

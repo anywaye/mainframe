@@ -194,7 +194,7 @@ func applySecrets(dryRun bool) {
 
 		# Check config from mainframe.yml
 		if [ -f "mainframe.yml" ]; then
-			infisical_host=$(grep -A2 "backend: infisical" mainframe.yml | grep "host:" | sed 's/.*host: *//' | tr -d ' ' || echo "")
+			infisical_host=$(grep -A2 "backend: infisical" mainframe.yml | grep "host:" | sed 's/^[[:space:]]*host:[[:space:]]*//' | sed 's/^"//;s/"$//' || echo "")
 			if [ -n "$infisical_host" ]; then
 				echo "  Infisical host: $infisical_host"
 			fi

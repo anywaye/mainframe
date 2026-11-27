@@ -45,29 +45,32 @@ secrets_status() {
 
   # Check machine identity
   if [ -n "${INFISICAL_CLIENT_ID:-}" ] && [ -n "${INFISICAL_CLIENT_SECRET:-}" ]; then
-    # Try to authenticate
     if infisical login --method=universal-auth \
         --client-id="$INFISICAL_CLIENT_ID" \
         --client-secret="$INFISICAL_CLIENT_SECRET" \
         --domain="$INFISICAL_HOST" \
         --silent 2>/dev/null; then
       echo "authenticated (machine identity)"
-    else
-      # Try interactive login check
-      if infisical user get 2>/dev/null | grep -q "email"; then
-        echo "authenticated (interactive)"
-      else
-        echo "unauthenticated"
-      fi
-    fi
-  else
-    # Check if already logged in
-    if infisical user get 2>/dev/null | grep -q "email"; then
-      echo "authenticated (interactive)"
-    else
-      echo "unauthenticated"
+      return 0
     fi
   fi
+
+  # Check interactive login by trying to list secrets
+  if [ -n "${INFISICAL_PROJECT_ID:-}" ]; then
+    if infisical secrets --env="${INFISICAL_ENV:-dev}" --projectId="$INFISICAL_PROJECT_ID" --domain="$INFISICAL_HOST" --silent 2>/dev/null | grep -q "SECRET NAME\|SECRET VALUE"; then
+      echo "authenticated (interactive)"
+      return 0
+    fi
+  fi
+
+  # Fallback: check if user get works
+  if infisical user get --domain="$INFISICAL_HOST" 2>/dev/null | grep -qi "profile\|email\|organization"; then
+    echo "authenticated (interactive)"
+    return 0
+  fi
+
+  echo "unauthenticated"
+  return 1
 }
 
 secrets_authenticate() {

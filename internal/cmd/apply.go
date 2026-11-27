@@ -63,23 +63,11 @@ func allSteps() []stepFunc {
 
 var applyCmd = &cobra.Command{
 	Use:   "apply [steps...]",
-	Short: "Apply machine configuration to the current machine",
-	Long: `Reads mainframe.yml and applies configuration to the current machine.
-Idempotent - safe to run multiple times.
+	Short: "Apply dev configuration to the current machine (advanced)",
+	Long: `Reads mainframe.yml and applies dev configuration (shell, git, editor, terminal, MCP, skills, secrets) to the current machine. Idempotent - safe to run multiple times.
 
-Run all steps:
-  mf apply
-
-Run specific steps:
-  mf apply runtimes shell git
-  mf apply shell git
-  mf apply ssh
-
-Skip steps:
-  mf apply --skip runtimes,shell
-
-List available steps:
-  mf apply --list`,
+NOTE: For most users, use 'mf dev setup' instead.
+WARNING: Do not run on production servers. Use 'mf prod setup' for production.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// List steps (doesn't need config dir)
 		if applyList {

@@ -22,8 +22,13 @@ var (
 
 var provisionCmd = &cobra.Command{
 	Use:   "provision",
-	Short: "Provision a VPS as a dev or prod box",
-	Long:  "Provision a fresh VPS. Detects OS, installs packages, sets up Tailscale, applies hardening, configures firewall, and runs mode-specific setup. Use --dry-run to preview without executing.",
+	Short: "Provision a VPS as a dev or prod box (advanced)",
+	Long: `Provision a fresh VPS. Detects OS, installs packages, sets up Tailscale, applies hardening, configures firewall, and runs mode-specific setup.
+
+NOTE: For most users, use 'mf dev setup' or 'mf prod setup' instead.
+This command is for advanced use cases where you need fine-grained control.
+
+Use --dry-run to preview without executing.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if provisionMode != "dev" && provisionMode != "prod" {
 			return fmt.Errorf("--mode must be 'dev' or 'prod'")

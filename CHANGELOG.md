@@ -1,3 +1,31 @@
+## [0.21.6] - 2026-11-27
+
+### Added
+- Local-first secrets: age-encrypted, peer-synced, standalone (no hub)
+  - `mf secrets init` — generate age keypair for this machine
+  - `mf secrets set/get/list/delete` — operate on local encrypted store
+  - `mf secrets sync` — push encrypted secrets to all peers via SSH
+  - `mf secrets sync --from <peer>` — pull secrets from a peer
+  - `mf secrets peers add/list/remove` — manage peer machines
+  - `mf secrets pubkey` — show this machine's public key
+  - Each machine is standalone: no external dependency, works offline
+  - If any machine dies, others continue working
+  - `mf apply` reads from local store (no network needed)
+- `mf secrets push-infisical` — sync local secrets to Infisical (optional broker)
+- `mf secrets --mode=personal` — Bitwarden wrapper for personal secrets
+- `--env=dev/prod` flag for `mf apply` (Rails-style, replaces --mode for environments)
+- Machine identity credentials file (`~/.config/mainframe/infisical.env`)
+- `mf secrets identity-create` — interactive setup for machine identity
+
+### Changed
+- Secrets backend switched from Infisical-hub to local-first (age-encrypted)
+- `mf apply --mode=prod/dev` deprecated in favor of `mf apply --env=prod/dev`
+- Infisical is now optional broker (for agent secret brokering), not primary storage
+
+### Removed
+- Bitwarden as machine secrets backend (kept for personal mode only)
+- Infisical as primary secrets storage (kept as optional broker)
+
 ## [0.20.0] - 2026-11-27
 
 ### Added

@@ -106,6 +106,45 @@ ensure_mise() {
   echo "[darwin] mise: $(mise --version)"
 }
 
+# Install Tailscale (mesh VPN for machine-to-machine connectivity)
+ensure_tailscale() {
+  if ! command -v tailscale &>/dev/null; then
+    echo "[darwin] Installing Tailscale..."
+    brew install tailscale 2>&1 | tail -2
+    # Start tailscaled daemon
+    sudo brew services start tailscale 2>/dev/null || true
+  fi
+  echo "[darwin] Tailscale: $(tailscale version 2>/dev/null | head -1 || echo 'not installed')"
+}
+
+# Configure Tailscale (connect to tailnet)
+configure_tailscale() {
+  local authkey="${TAILSCALE_AUTHKEY:-}"
+  if [ -z "$authkey" ] && [ -f /var/lib/mainframe/tailscale-authkey ]; then
+    authkey=$(cat /var/lib/mainframe/tailscale-authkey)
+  fi
+
+  if [ -z "$authkey" ]; then
+    echo "[darwin] No Tailscale authkey found. Skipping Tailscale setup."
+    echo "[darwin] To connect: tailscale up --authkey=<your-key>"
+    return 0
+  fi
+
+  if tailscale status >/dev/null 2>&1; then
+    echo "[darwin] Tailscale: already connected"
+  else
+    echo "[darwin] Connecting to Tailscale..."
+    tailscale up --authkey="$authkey" --ssh=false 2>&1 | tail -2
+    sleep 2
+  fi
+
+  if tailscale status >/dev/null 2>&1; then
+    echo "[darwin] Tailscale IP: $(tailscale ip -4 2>/dev/null)"
+  else
+    echo "[darwin] WARNING: Tailscale not connected. Check authkey."
+  fi
+}
+
 # Install runtimes from runtimes.conf
 install_runtimes() {
   local conf="${1:-runtimes.conf}"
@@ -185,6 +224,8 @@ apply_config() {
   ensure_xcode_cli
   ensure_brew
   ensure_mise
+  ensure_tailscale
+  configure_tailscale
 
   # Packages
   if [ -f "packages.conf" ]; then

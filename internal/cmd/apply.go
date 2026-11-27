@@ -66,8 +66,8 @@ var applyCmd = &cobra.Command{
 	Short: "Apply dev configuration to the current machine (advanced)",
 	Long: `Reads mainframe.yml and applies dev configuration (shell, git, editor, terminal, MCP, skills, secrets) to the current machine. Idempotent - safe to run multiple times.
 
-NOTE: For most users, use 'mf dev setup' instead.
-WARNING: Do not run on production servers. Use 'mf prod setup' for production.`,
+NOTE: For most users, use 'mf setup --dev' instead.
+WARNING: Do not run on production servers. Use 'mf setup --prod' for production.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// List steps (doesn't need config dir)
 		if applyList {

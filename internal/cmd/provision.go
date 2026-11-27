@@ -25,7 +25,7 @@ var provisionCmd = &cobra.Command{
 	Short: "Provision a VPS as a dev or prod box (advanced)",
 	Long: `Provision a fresh VPS. Detects OS, installs packages, sets up Tailscale, applies hardening, configures firewall, and runs mode-specific setup.
 
-NOTE: For most users, use 'mf dev setup' or 'mf prod setup' instead.
+NOTE: For most users, use 'mf setup --dev' or 'mf setup --prod' instead.
 This command is for advanced use cases where you need fine-grained control.
 
 Use --dry-run to preview without executing.`,

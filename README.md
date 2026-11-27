@@ -173,10 +173,12 @@ Supported agents: ZCode, OpenCode (extensible to others).
 ### Secrets
 | Command | Description |
 |---|---|
-| `mf secrets status` | Show secrets backend status |
-| `mf secrets unlock` | Unlock vault, store session |
-| `mf secrets unlock --passwordenv BW_PASSWORD` | Unlock non-interactively |
-| `mf secrets lock` | Lock vault, remove session |
+| `mf secrets status` | Show Infisical status |
+| `mf secrets setup` | Set up Infisical (self-host or cloud) |
+| `mf secrets setup --self-host` | Self-host Infisical via Docker Compose |
+| `mf secrets login` | Login to Infisical interactively |
+| `mf secrets identity-create` | Create machine identity for non-interactive access |
+| `mf secrets export` | Export all secrets from Infisical |
 
 ### Utilities
 | Command | Description |
@@ -204,7 +206,7 @@ Adding a new OS is just adding a new file that implements the standard interface
 
 ## Secrets
 
-Secrets are never stored in the config repo. They're referenced by name and fetched from a password manager at apply time.
+Secrets are never stored in the config repo. They're referenced by name and fetched from Infisical at apply time. Infisical is the only secrets backend.
 
 Supported backends: Infisical (self-hosted or cloud).
 

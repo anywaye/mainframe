@@ -110,7 +110,7 @@ func applySSHKeys(dryRun bool) {
 
 		if ! type secrets_available &>/dev/null || ! secrets_available 2>/dev/null; then
 			echo "  Secrets backend '$SECRETS_BACKEND' not available. Skipping."
-			return 0
+			exit 0
 		fi
 
 		status=$(secrets_status 2>/dev/null || echo "unknown")
@@ -118,7 +118,7 @@ func applySSHKeys(dryRun bool) {
 
 		if [ "$status" = "unauthenticated" ] || [ "$status" = "locked" ]; then
 			echo "  Vault not accessible ($status). Skipping SSH key fetch."
-			return 0
+			exit 0
 		fi
 
 		# Read SSH keys from config (ssh/keys.conf or mainframe.yml)
@@ -126,7 +126,7 @@ func applySSHKeys(dryRun bool) {
 		if [ ! -f "$keys_conf" ]; then
 			echo "  No ssh/keys.conf found. Skipping SSH key fetch."
 			echo "  Create ssh/keys.conf with: <bitwarden_item_name>:<path>"
-			return 0
+			exit 0
 		fi
 
 		echo "  Fetching SSH keys from $keys_conf..."
@@ -176,7 +176,7 @@ func applySecrets(dryRun bool) {
 		if [ "$SECRETS_BACKEND" = "bitwarden" ]; then
 			if ! command -v bw &>/dev/null; then
 				echo "  Bitwarden CLI not found. Skipping."
-				return 0
+				exit 0
 			fi
 			status=$(timeout 5 bw status 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown")
 			echo "  Bitwarden status: $status"
@@ -196,5 +196,79 @@ func applySecrets(dryRun bool) {
 		else
 			echo "  Backend: $SECRETS_BACKEND (not yet implemented)"
 		fi
+	`)
+}
+
+// applyGPGKeys fetches GPG keys from password manager and configures git signing.
+func applyGPGKeys(dryRun bool) {
+	fmt.Println("\n[8c/18] Fetching GPG keys from password manager...")
+	if _, err := os.Stat("mainframe.yml"); err != nil {
+		fmt.Println("  No mainframe.yml found. Skipping.")
+		return
+	}
+	if dryRun {
+		fmt.Println("  [dry-run] Would fetch GPG keys from password manager")
+		return
+	}
+	runShellStep("fetch gpg keys", `
+		# Source secrets backend
+		SECRETS_BACKEND="${SECRETS_BACKEND:-bitwarden}"
+		_backend=""
+		for _p in "lib/secrets.sh" "$MAINFRAME_LIB/secrets.sh" "/usr/local/lib/mainframe/lib/secrets.sh"; do
+			if [ -f "$_p" ]; then _backend="$_p"; break; fi
+		done
+		if [ -n "$_backend" ]; then source "$_backend"; fi
+
+		if ! type secrets_available &>/dev/null || ! secrets_available 2>/dev/null; then
+			echo "  Secrets backend '$SECRETS_BACKEND' not available. Skipping."
+			exit 0
+		fi
+
+		status=$(secrets_status 2>/dev/null || echo "unknown")
+		echo "  Secrets backend: $SECRETS_BACKEND (status: $status)"
+
+		if [ "$status" = "unauthenticated" ] || [ "$status" = "locked" ]; then
+			echo "  Vault not accessible ($status). Skipping GPG key fetch."
+			exit 0
+		fi
+
+		# Read GPG keys from config
+		gpg_conf="gpg/keys.conf"
+		if [ ! -f "$gpg_conf" ]; then
+			echo "  No gpg/keys.conf found. Skipping GPG key fetch."
+			exit 0
+		fi
+
+		echo "  Fetching GPG keys from $gpg_conf..."
+		while IFS= read -r line; do
+			line="${line%%#*}"
+			line="$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+			[ -z "$line" ] && continue
+			item_name="$line"
+			echo "  Fetching: $item_name"
+			# Get the GPG private key from Bitwarden notes and import
+			key_data=$(secrets_get_note "$item_name" 2>/dev/null)
+			if [ -n "$key_data" ]; then
+				echo "$key_data" | gpg --batch --import 2>&1 | tail -2
+				# Extract the key ID for git config
+				key_id=$(echo "$key_data" | gpg --list-packets 2>/dev/null | grep -i "key id" | head -1 | sed 's/.*key id: //')
+				if [ -n "$key_id" ]; then
+					echo "  Imported GPG key: $key_id"
+				fi
+			else
+				echo "  No key data found for $item_name"
+			fi
+		done < "$gpg_conf"
+
+		# Configure git to use GPG signing if a key was imported
+		if gpg --list-secret-keys 2>/dev/null | grep -q "sec"; then
+			signing_key=$(gpg --list-secret-keys --with-colons 2>/dev/null | grep "^sec" | head -1 | cut -d: -f5)
+			if [ -n "$signing_key" ]; then
+				git config --global user.signingkey "$signing_key"
+				git config --global commit.gpgsign true
+				echo "  Git configured for GPG signing (key: $signing_key)"
+			fi
+		fi
+		echo "  GPG key fetch complete"
 	`)
 }

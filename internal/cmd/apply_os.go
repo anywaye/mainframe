@@ -67,7 +67,34 @@ func applyAgentConfigs(dryRun bool) {
 				echo "  Syncing agent: $agent"
 				config=$(jq -r ".agents.$agent.config" agents/registry.json 2>/dev/null)
 				if [ -f "$config" ]; then
-					echo "    Config: $config"
+					# Run install command if agent binary not found
+					agent_bin="$agent"
+					case "$agent" in
+						zcode) agent_bin="zcode" ;;
+						opencode) agent_bin="opencode" ;;
+						claude) agent_bin="claude" ;;
+					esac
+					if ! command -v "$agent_bin" &>/dev/null; then
+						echo "    $agent not installed. Running install..."
+						os_family=$(uname -s | tr '[:upper:]' '[:lower:]')
+						if [ "$os_family" = "darwin" ]; then
+							install_cmd=$(jq -r ".agents.$agent.install.macos" "$config" 2>/dev/null)
+						else
+							install_cmd=$(jq -r ".agents.$agent.install.linux" "$config" 2>/dev/null)
+						fi
+						if [ -n "$install_cmd" ] && [ "$install_cmd" != "null" ]; then
+							eval "$install_cmd" 2>&1 | tail -3
+						fi
+					else
+						echo "    $agent: already installed"
+					fi
+					# Sync config files
+					for key in mcp settings skills agents_md; do
+						src=$(jq -r ".config_sync.$key" "$config" 2>/dev/null)
+						if [ -n "$src" ] && [ "$src" != "null" ]; then
+							echo "    Syncing $key: $src"
+						fi
+					done
 				fi
 			done
 		else

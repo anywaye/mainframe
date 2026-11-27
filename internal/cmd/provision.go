@@ -204,7 +204,7 @@ Use --dry-run to preview without executing.`,
 			if err := runScript("lib/secrets.sh"); err != nil {
 				// secrets.sh exits 0 when BW_EMAIL is not set (optional)
 				logMsg("  Warning: %v", err)
-				logMsg("  Hint: set BW_EMAIL and re-run for Bitwarden setup")
+				logMsg("  Hint: set INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET for Infisical setup")
 			}
 			return nil
 		}) {

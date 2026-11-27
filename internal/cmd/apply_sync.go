@@ -201,24 +201,7 @@ func applyMCPConfig(dryRun bool) {
 	}
 	runShellStep("sync mcp", `
 		mkdir -p "$HOME/.zcode/cli"
-		# Preserve existing BW_SESSION if present in local config
-		local_bw_session=""
-		if [ -f "$HOME/.zcode/cli/config.json" ]; then
-			local_bw_session=$(python3 -c "import json,sys; d=json.load(open('$HOME/.zcode/cli/config.json')); print(d.get('mcp',{}).get('servers',{}).get('bitwarden',{}).get('env',{}).get('BW_SESSION',''))" 2>/dev/null)
-		fi
 		cp mcp/config.json "$HOME/.zcode/cli/config.json"
-		# Restore BW_SESSION if it was set and not a placeholder
-		if [ -n "$local_bw_session" ] && [ "$local_bw_session" != "{{secret:bw-session}}" ]; then
-			python3 -c "
-import json
-p='$HOME/.zcode/cli/config.json'
-d=json.load(open(p))
-if 'bitwarden' in d.get('mcp',{}).get('servers',{}):
-    d['mcp']['servers']['bitwarden']['env']['BW_SESSION']='$local_bw_session'
-json.dump(d, open(p,'w'), indent=2)
-" 2>/dev/null
-			echo "  Preserved existing BW_SESSION"
-		fi
 		echo "  MCP config synced"
 	`)
 }

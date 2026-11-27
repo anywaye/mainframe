@@ -206,7 +206,7 @@ Adding a new OS is just adding a new file that implements the standard interface
 
 Secrets are never stored in the config repo. They're referenced by name and fetched from a password manager at apply time.
 
-Supported backends: Bitwarden, 1Password, Infisical, environment variables.
+Supported backends: Infisical (self-hosted or cloud).
 
 ## License
 

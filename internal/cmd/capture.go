@@ -209,7 +209,10 @@ hardening:
   fail2ban: true
 
 secrets:
-  backend: bitwarden
+  backend: infisical
+  host: "http://localhost:8080"
+  project: "mainframe"
+  environment: "dev"
 
 packages: packages.conf
 runtimes: runtimes.conf

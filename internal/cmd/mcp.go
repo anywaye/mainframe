@@ -442,44 +442,9 @@ func mcpApplyCmd() *cobra.Command {
 							zcodeServers[d.Name] = map[string]interface{}{"type": "stdio", "command": d.Command, "args": d.Args, "env": d.Env}
 						}
 					}
-					// Preserve existing BW_SESSION from local config
+					// No BW_SESSION preservation needed (using Infisical)
 					home, _ := os.UserHomeDir()
 					path := filepath.Join(home, ".zcode", "cli", "config.json")
-					existingBWSession := ""
-					if existingData, err := os.ReadFile(path); err == nil {
-						var existingConfig map[string]interface{}
-						if json.Unmarshal(existingData, &existingConfig) == nil {
-							if servers, ok := existingConfig["mcp"].(map[string]interface{})["servers"].(map[string]interface{}); ok {
-								if bw, ok := servers["bitwarden"].(map[string]interface{}); ok {
-									if env, ok := bw["env"].(map[string]interface{}); ok {
-										if session, ok := env["BW_SESSION"].(string); ok && session != "" && session != "{{secret:bw-session}}" {
-											existingBWSession = session
-										}
-									}
-								}
-							}
-						}
-					}
-					// Substitute placeholder with preserved session
-					if existingBWSession != "" {
-						for _, d := range defs {
-							if d.Name == "bitwarden" {
-								if d.Env == nil {
-									d.Env = map[string]string{}
-								}
-								d.Env["BW_SESSION"] = existingBWSession
-							}
-						}
-						// Rebuild zcodeServers with updated env
-						zcodeServers = map[string]interface{}{}
-						for _, d := range defs {
-							if d.Type == "http" {
-								zcodeServers[d.Name] = map[string]interface{}{"type": "http", "url": d.URL}
-							} else {
-								zcodeServers[d.Name] = map[string]interface{}{"type": "stdio", "command": d.Command, "args": d.Args, "env": d.Env}
-							}
-						}
-					}
 					config := map[string]interface{}{"mcp": map[string]interface{}{"servers": zcodeServers}}
 					os.MkdirAll(filepath.Dir(path), 0755)
 					data, _ := json.MarshalIndent(config, "", "  ")

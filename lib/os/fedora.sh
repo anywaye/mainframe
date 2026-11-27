@@ -26,7 +26,7 @@ install_node() { echo "[fedora] Not implemented. Install Node manually." >&2; re
 install_python() { echo "[fedora] Not implemented. Install Python manually." >&2; return 1; }
 install_helm() { echo "[fedora] Not implemented. Install Helm manually." >&2; return 1; }
 install_gh() { echo "[fedora] Not implemented. Install gh manually." >&2; return 1; }
-install_bw() { echo "[fedora] Not implemented. Install Bitwarden CLI manually." >&2; return 1; }
+install_infisical() { echo "[fedora] Not implemented. Install Infisical CLI manually: https://infisical.com/docs/cli/overview" >&2; return 1; }
 install_osv_scanner() { echo "[fedora] Not implemented. Install osv-scanner manually." >&2; return 1; }
 install_postgresql_client() { dnf install -y postgresql 2>&1 | tail -1; }
 

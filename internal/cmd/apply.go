@@ -18,6 +18,7 @@ var applyDryRun bool
 var applyOnly string
 var applySkip string
 var applyList bool
+var applyMode string
 var applyResume bool
 var applyVerbose int
 
@@ -119,6 +120,24 @@ WARNING: Do not run on production servers. Use 'mf setup --prod' for production.
 			selected = steps
 		}
 
+		// In prod mode, skip dev-only steps
+		if applyMode == "prod" {
+			devOnly := map[string]bool{
+				"shell": true, "git": true, "editor": true, "terminal": true,
+				"mcp": true, "skills": true, "bin": true, "agents": true,
+				"macos-defaults": true,
+			}
+			var filtered []stepFunc
+			for _, step := range selected {
+				if !devOnly[step.name] {
+					filtered = append(filtered, step)
+				} else {
+					fmt.Printf("  Skipping %s (dev-only, prod mode)\n", step.name)
+				}
+			}
+			selected = filtered
+		}
+
 		// Apply skip filter
 		if applySkip != "" {
 			skipSet := map[string]bool{}
@@ -165,7 +184,17 @@ WARNING: Do not run on production servers. Use 'mf setup --prod' for production.
 
 		os.Setenv("MAINFRAME_LIB", tmpDir)
 
-		fmt.Printf("=== Applying mainframe config from %s ===\n", configDir)
+		// Determine mode
+		if applyMode == "" {
+			// Auto-detect from mainframe.yml
+			modeData, _ := os.ReadFile(filepath.Join(configDir, "mainframe.yml"))
+			if strings.Contains(string(modeData), "mode: prod") {
+				applyMode = "prod"
+			} else {
+				applyMode = "dev"
+			}
+		}
+		fmt.Printf("=== Applying mainframe config from %s (mode: %s) ===\n", configDir, applyMode)
 		if applyDryRun {
 			fmt.Println("[DRY RUN - no changes will be made]")
 		}
@@ -247,6 +276,7 @@ func init() {
 	applyCmd.Flags().StringVar(&applyOnly, "only", "", "Run only these steps (comma-separated)")
 	applyCmd.Flags().StringVar(&applySkip, "skip", "", "Skip these steps (comma-separated)")
 	applyCmd.Flags().BoolVar(&applyList, "list", false, "List available steps")
+	applyCmd.Flags().StringVar(&applyMode, "mode", "", "Apply mode: dev or prod (default: auto-detect from mainframe.yml)")
 	applyCmd.Flags().BoolVar(&applyResume, "resume", false, "Resume from previous interrupted run")
 	applyCmd.Flags().IntVarP(&applyVerbose, "verbose", "v", 0, "Verbose level (0=normal, 1=timing, 2=debug)")
 	rootCmd.AddCommand(applyCmd)

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -52,6 +53,15 @@ hardening — no dev tools, no editor config, no MCP servers.`,
 			provisionCmd.SetArgs([]string{"--mode", "prod"})
 			if err := provisionCmd.RunE(provisionCmd, []string{}); err != nil {
 				return fmt.Errorf("provision failed: %w", err)
+			}
+
+			// Apply prod config if prod: directory exists
+			if _, err := os.Stat("prod"); err == nil {
+				fmt.Println("\nApplying prod config...")
+				applyCmd.SetArgs([]string{"--mode", "prod"})
+				if err := applyCmd.RunE(applyCmd, []string{}); err != nil {
+					return fmt.Errorf("apply failed: %w", err)
+				}
 			}
 
 			fmt.Println("\n=== Prod setup complete ===")

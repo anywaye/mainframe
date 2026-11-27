@@ -83,7 +83,7 @@ func chatsPullCmd() *cobra.Command {
 
 				fmt.Printf("  %s (%s): pulling chats...\n", m.Name, m.Host)
 
-				// Pull chat data from remote via rsync
+				// Pull chat data from remote via rsync + merge
 				home, _ := os.UserHomeDir()
 				remotePaths := []string{
 					"~/.zcode/v2/tasks-index.sqlite",
@@ -93,14 +93,41 @@ func chatsPullCmd() *cobra.Command {
 				}
 				for _, rpath := range remotePaths {
 					localPath := strings.Replace(rpath, "~", home, 1)
-					// Ensure parent dir exists
 					os.MkdirAll(filepath.Dir(localPath), 0755)
-					rsyncCmd := exec.Command("rsync", "-az", "--ignore-existing",
-						fmt.Sprintf("%s:%s", m.Host, rpath), localPath)
-					if out, err := rsyncCmd.CombinedOutput(); err != nil {
-						// Not all paths exist on remote — that's fine
-						if !strings.Contains(string(out), "No such file") {
-							fmt.Printf("    Warning: rsync %s: %v\n", rpath, err)
+
+					// For SQLite DBs, pull to temp and merge (don't overwrite)
+					if strings.HasSuffix(rpath, ".sqlite") || strings.HasSuffix(rpath, ".db") {
+						tmpPath := localPath + ".remote.tmp"
+						rsyncCmd := exec.Command("rsync", "-az",
+							fmt.Sprintf("%s:%s", m.Host, rpath), tmpPath)
+						if out, err := rsyncCmd.CombinedOutput(); err != nil {
+							if !strings.Contains(string(out), "No such file") {
+								fmt.Printf("    Warning: rsync %s: %v\n", rpath, err)
+							}
+							continue
+						}
+						// Merge remote DB into local (insert or ignore)
+						if _, err := os.Stat(localPath); err == nil {
+							mergeSQL := fmt.Sprintf("ATTACH DATABASE '%s' AS remote; INSERT OR IGNORE INTO tasks SELECT * FROM remote.tasks;", tmpPath)
+							if strings.HasSuffix(rpath, "opencode.db") {
+								mergeSQL = fmt.Sprintf("ATTACH DATABASE '%s' AS remote; INSERT OR IGNORE INTO sessions SELECT * FROM remote.sessions;", tmpPath)
+							}
+							if strings.HasSuffix(rpath, "db.sqlite") && !strings.HasSuffix(rpath, "tasks-index.sqlite") {
+								mergeSQL = fmt.Sprintf("ATTACH DATABASE '%s' AS remote; INSERT OR IGNORE INTO session SELECT * FROM remote.session;", tmpPath)
+							}
+							exec.Command("sqlite3", localPath, mergeSQL).Run()
+						} else {
+							os.Rename(tmpPath, localPath)
+						}
+						os.Remove(tmpPath)
+					} else {
+						// For directories (rollout/), use rsync with --ignore-existing
+						rsyncCmd := exec.Command("rsync", "-az", "--ignore-existing",
+							fmt.Sprintf("%s:%s", m.Host, rpath), localPath)
+						if out, err := rsyncCmd.CombinedOutput(); err != nil {
+							if !strings.Contains(string(out), "No such file") {
+								fmt.Printf("    Warning: rsync %s: %v\n", rpath, err)
+							}
 						}
 					}
 				}

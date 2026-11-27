@@ -29,8 +29,8 @@ Like Rails provides the structure for web apps, Mainframe provides the structure
 
 - `mf new my-mainframe` scaffolds the structure
 - You fill in `packages.conf`, `shell/`, `editor/`, `mcp/`, etc.
-- `mf dev setup` sets up a dev machine (provision + apply)
-- `mf prod setup` sets up a production server (provision only)
+- `mf setup --dev` sets up a dev machine (provision + apply)
+- `mf setup --prod` sets up a production server (provision only)
 - `mf capture` scans a machine and generates config
 
 **The framework provides the structure and logic. The user provides the content.**
@@ -97,8 +97,8 @@ Every directory is optional. The framework applies what's there, skips what's no
 ### Setup (recommended)
 | Command | Description |
 |---|---|
-| `mf dev setup` | Full dev machine setup (provision + apply) |
-| `mf prod setup` | Production server setup (provision only) |
+| `mf setup --dev` | Full dev machine setup (provision + apply) |
+| `mf setup --prod` | Production server setup (provision only) |
 
 ### Provisioning (advanced)
 | Command | Description |

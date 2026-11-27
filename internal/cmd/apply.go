@@ -37,7 +37,6 @@ func allSteps() []stepFunc {
 			fmt.Printf("  OS family: %s\n", fam)
 		}},
 		{"tailscale", "Check Tailscale connectivity", applyTailscale},
-		{"packages", "Install system packages", applyPackages},
 		{"runtimes", "Install language runtimes", applyRuntimes},
 		{"custom-installs", "Run custom install scripts", applyCustomInstalls},
 		{"shell", "Sync shell configuration", applyShellConfig},
@@ -72,12 +71,12 @@ Run all steps:
   mf apply
 
 Run specific steps:
-  mf apply packages runtimes
+  mf apply runtimes shell git
   mf apply shell git
   mf apply ssh
 
 Skip steps:
-  mf apply --skip packages,runtimes
+  mf apply --skip runtimes,shell
 
 List available steps:
   mf apply --list`,

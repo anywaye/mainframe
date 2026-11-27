@@ -49,6 +49,8 @@ var newCmd = &cobra.Command{
 		files := map[string]string{
 			dir + "/mainframe.yml":          mainframeYML,
 			dir + "/packages.conf":          packagesConf,
+			dir + "/packages.dev.conf":      packagesDevConf,
+			dir + "/packages.prod.conf":     packagesProdConf,
 			dir + "/runtimes.conf":          runtimesConf,
 			dir + "/firewall.conf":          firewallConf,
 			dir + "/.env.template":          envTemplate,
@@ -136,6 +138,12 @@ dev:
     config: mcp/config.json
   os: os/darwin.sh
 
+# prod: section (optional, for production-specific config)
+# prod:
+#   shell: shell.prod/
+#   monitoring: monitoring/
+#   os: os/linux.sh
+
 agents:
   registry: agents/registry.json
   enabled: []
@@ -178,6 +186,39 @@ unzip
 # starship
 # uv
 # eza
+`
+
+const packagesDevConf = `# packages.dev.conf - dev-only packages (dev machines only)
+# One package per line. Lines starting with # are comments.
+# Version pins use colon: package:version
+
+# --- CLI tools ---
+# fzf
+# tmux
+# neovim
+# lazygit
+
+# --- Terminal ---
+# ghostty
+# kitty
+
+# --- Database clients ---
+# postgresql
+# redis
+`
+
+const packagesProdConf = `# packages.prod.conf - prod-only packages (production machines only)
+# One package per line. Lines starting with # are comments.
+# Version pins use colon: package:version
+
+# --- Database clients ---
+# postgresql
+# redis
+
+# --- Monitoring (uncomment if needed) ---
+# htop
+# ncdu
+# iotop
 `
 
 const runtimesConf = `# runtimes.conf - language runtimes via mise

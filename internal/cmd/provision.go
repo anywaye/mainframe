@@ -114,12 +114,23 @@ var provisionCmd = &cobra.Command{
 			if err := runScript("lib/os/" + osFamily + ".sh"); err != nil {
 				return fmt.Errorf("OS module failed: %w", err)
 			}
+			// Install base packages (all machines)
 			pkgConf := findAsset("packages.conf")
 			if pkgConf != "" {
 				if err := runScriptWithArgs("lib/packages.sh", pkgConf); err != nil {
 					logMsg("  Warning: package installation had issues: %v", err)
 					logMsg("  Hint: some packages may need manual installation")
 				}
+			}
+			// Install mode-specific packages
+			modePkgConf := findAsset("packages." + provisionMode + ".conf")
+			if modePkgConf != "" {
+				logMsg("  Installing %s packages...", provisionMode)
+				if err := runScriptWithArgs("lib/packages.sh", modePkgConf); err != nil {
+					logMsg("  Warning: %s package installation had issues: %v", provisionMode, err)
+				}
+			} else {
+				logMsg("  No packages.%s.conf found. Skipping.", provisionMode)
 			}
 			return nil
 		}) {

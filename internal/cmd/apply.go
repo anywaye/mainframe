@@ -187,9 +187,6 @@ WARNING: Do not run on production servers. Use 'mf setup --prod' for production.
 
 		os.Setenv("MAINFRAME_LIB", tmpDir)
 
-		// Load Infisical credentials from file if env vars not set
-		loadInfisicalCredentials()
-
 		// Determine environment (--env takes priority, then --mode, then auto-detect)
 		if applyEnv != "" {
 			applyMode = applyEnv

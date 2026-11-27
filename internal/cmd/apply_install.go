@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // applyPackages installs system packages from packages.conf.
@@ -88,44 +89,22 @@ func applyRuntimes(dryRun bool) {
 	}
 }
 
-// applySSHKeys fetches SSH keys from password manager.
+// applySSHKeys fetches SSH keys from local secrets store.
 func applySSHKeys(dryRun bool) {
-	fmt.Println("\n[8b/18] Fetching SSH keys from password manager...")
+	fmt.Println("\n[8b/18] Fetching SSH keys from local secrets store...")
 	if _, err := os.Stat("mainframe.yml"); err != nil {
 		fmt.Println("  No mainframe.yml found. Skipping.")
 		return
 	}
 	if dryRun {
-		fmt.Println("  [dry-run] Would fetch SSH keys from password manager")
+		fmt.Println("  [dry-run] Would fetch SSH keys from local secrets store")
 		return
 	}
 	runShellStep("fetch ssh keys", `
-		# Source secrets backend
-		SECRETS_BACKEND="infisical"
-		_backend=""
-		for _p in "lib/secrets.sh" "$MAINFRAME_LIB/secrets.sh" "/usr/local/lib/mainframe/lib/secrets.sh"; do
-			if [ -f "$_p" ]; then _backend="$_p"; break; fi
-		done
-		if [ -n "$_backend" ]; then source "$_backend"; fi
-
-		if ! type secrets_available &>/dev/null || ! secrets_available 2>/dev/null; then
-			echo "  Secrets backend '$SECRETS_BACKEND' not available. Skipping."
-			exit 0
-		fi
-
-		status=$(secrets_status 2>/dev/null || echo "unknown")
-		echo "  Secrets backend: $SECRETS_BACKEND (status: $status)"
-
-		if [ "$status" = "unauthenticated" ] || [ "$status" = "locked" ]; then
-			echo "  Vault not accessible ($status). Skipping SSH key fetch."
-			exit 0
-		fi
-
-		# Read SSH keys from config (ssh/keys.conf or mainframe.yml)
+		# Read SSH keys from config
 		keys_conf="ssh/keys.conf"
 		if [ ! -f "$keys_conf" ]; then
 			echo "  No ssh/keys.conf found. Skipping SSH key fetch."
-			echo "  Create ssh/keys.conf with: <infisical_secret_name>:<path>"
 			exit 0
 		fi
 
@@ -136,7 +115,6 @@ func applySSHKeys(dryRun bool) {
 			[ -z "$line" ] && continue
 			item_name="${line%%:*}"
 			key_path="${line#*:}"
-			# Expand ~
 			key_path="${key_path/#\~/$HOME}"
 			if [ -f "$key_path" ]; then
 				echo "  $key_path already exists. Skipping."
@@ -144,8 +122,7 @@ func applySSHKeys(dryRun bool) {
 			fi
 			echo "  Fetching: $item_name -> $key_path"
 			mkdir -p "$(dirname "$key_path")"
-			# Infisical stores the key value directly
-			key_value=$(secrets_get_value "$item_name" 2>/dev/null)
+			key_value=$(mf secrets get "$item_name" 2>/dev/null)
 			if [ -n "$key_value" ]; then
 				echo "$key_value" > "$key_path"
 				echo "  Written to $key_path"
@@ -161,45 +138,30 @@ func applySSHKeys(dryRun bool) {
 	`)
 }
 
-// applySecrets checks Infisical authentication and machine identity.
+// applySecrets checks local secrets store.
 func applySecrets(dryRun bool) {
-	fmt.Println("\n[8a/18] Managing Infisical secrets...")
+	fmt.Println("\n[8a/18] Managing local secrets store...")
 	if dryRun {
-		fmt.Println("  [dry-run] Would check Infisical authentication")
+		fmt.Println("  [dry-run] Would check local secrets store")
 		return
 	}
-	runShellStep("secrets status", `
-		# Source infisical backend
-		SECRETS_BACKEND="infisical"
-		_backend=""
-		for _p in "lib/secrets.sh" "$MAINFRAME_LIB/secrets.sh" "/usr/local/lib/mainframe/lib/secrets.sh"; do
-			if [ -f "$_p" ]; then _backend="$_p"; break; fi
-		done
-		if [ -n "$_backend" ]; then source "$_backend"; fi
+	// Check age keypair
+	if _, err := os.Stat(ageKeyPath()); err != nil {
+		fmt.Println("  No age keypair found. Run 'mf secrets init' first.")
+		return
+	}
+	pubData, _ := os.ReadFile(agePubPath())
+	fmt.Printf("  Age keypair: exists (%s)\n", strings.TrimSpace(string(pubData))[:20]+"...")
 
-		if ! type secrets_available &>/dev/null || ! secrets_available 2>/dev/null; then
-			echo "  Infisical CLI not found. Installing..."
-			secrets_install 2>&1 | tail -3
-		fi
+	secrets, err := decryptLocalSecrets()
+	if err != nil {
+		fmt.Printf("  Error decrypting secrets: %v\n", err)
+		return
+	}
+	fmt.Printf("  Local secrets: %d stored\n", len(secrets))
 
-		status=$(secrets_status 2>/dev/null || echo "unknown")
-		echo "  Infisical status: $status"
-
-		if [ "$status" = "unauthenticated" ] || [ "$status" = "unconfigured" ] || [ "$status" = "unavailable" ]; then
-			echo "  Infisical not configured. Run 'mf secrets setup' to configure."
-			echo "  Or set INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET env vars."
-		elif [ "$status" = "authenticated (machine identity)" ] || [ "$status" = "authenticated (interactive)" ]; then
-			echo "  Infisical authenticated."
-		fi
-
-		# Check config from mainframe.yml
-		if [ -f "mainframe.yml" ]; then
-			infisical_host=$(grep -A2 "backend: infisical" mainframe.yml | grep "host:" | sed 's/^[[:space:]]*host:[[:space:]]*//' | sed 's/^"//;s/"$//' || echo "")
-			if [ -n "$infisical_host" ]; then
-				echo "  Infisical host: $infisical_host"
-			fi
-		fi
-	`)
+	cfg := loadPeers()
+	fmt.Printf("  Peers: %d configured\n", len(cfg.Peers))
 }
 
 // applyGPGKeys fetches GPG keys from password manager and configures git signing.

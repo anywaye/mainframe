@@ -28,7 +28,7 @@ done
 
 # Retry tailscale up
 for i in $(seq 1 3); do
-  if tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh=false 2>&1; then
+  if tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh=false --reset 2>&1; then
     break
   fi
   echo "[tailscale] Retry $i/3..."

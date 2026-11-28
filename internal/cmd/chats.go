@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-
 	"github.com/spf13/cobra"
 )
 
@@ -32,15 +31,156 @@ func resolveFleetConfigDir() string {
 	return resolveConfigDir()
 }
 
-// loadFleetConfig loads a fleet config by name.
-func loadFleetConfigByName(fleetName string) (FleetConfig, error) {
-	configDir := resolveFleetConfigDir()
-	return loadFleet(configDir, fleetName)
-}
-
 // defaultFleetName returns the default fleet name.
 func defaultFleetName() string {
 	return "dev"
+}
+
+// chatDB describes one agent chat database/dir to sync between machines.
+type chatDB struct {
+	label       string   // human label for progress output
+	remote      []string // candidate paths on the peer (first existing wins)
+	local       string   // local path (tilde form)
+	mergeTables []string // tables to INSERT OR IGNORE (empty for dirs)
+	isDir       bool
+}
+
+// builtinChatDBs returns the built-in chat paths for known agents.
+// NOTE: the ZCode CLI database lives at ~/.zcode/cli/db/db.sqlite since the
+// CLI restructure; the legacy ~/.zcode/cli/db.sqlite path is still probed so
+// older installs keep syncing.
+func builtinChatDBs() []chatDB {
+	return []chatDB{
+		{
+			label:       "zcode/tasks-index",
+			remote:      []string{"~/.zcode/v2/tasks-index.sqlite"},
+			local:       "~/.zcode/v2/tasks-index.sqlite",
+			mergeTables: []string{"tasks", "projects", "project_roots"},
+		},
+		{
+			label:       "zcode/cli-db",
+			remote:      []string{"~/.zcode/cli/db/db.sqlite", "~/.zcode/cli/db.sqlite"},
+			local:       "~/.zcode/cli/db/db.sqlite",
+			mergeTables: []string{"session", "message", "part"},
+		},
+		{
+			label: "zcode/rollout",
+			remote: []string{"~/.zcode/cli/rollout/"},
+			local:  "~/.zcode/cli/rollout/",
+			isDir:  true,
+		},
+		{
+			label:       "opencode/db",
+			remote:      []string{"~/.opencode/opencode.db"},
+			local:       "~/.opencode/opencode.db",
+			mergeTables: []string{"sessions"},
+		},
+	}
+}
+
+// agentChatDBs returns the chat DBs to sync: built-ins for known agents plus
+// any additional agents that ship agents/<name>/chats/paths.conf in the config
+// repo (so future agents work without code changes).
+func agentChatDBs(configDir string) []chatDB {
+	dbs := builtinChatDBs()
+	if configDir == "" || configDir == "." {
+		return dbs
+	}
+	entries, err := os.ReadDir(filepath.Join(configDir, "agents"))
+	if err != nil {
+		return dbs
+	}
+	known := map[string]bool{"zcode": true, "opencode": true}
+	for _, e := range entries {
+		if !e.IsDir() || known[e.Name()] {
+			continue
+		}
+		conf := filepath.Join(configDir, "agents", e.Name(), "chats", "paths.conf")
+		data, err := os.ReadFile(conf)
+		if err != nil {
+			continue
+		}
+		inPaths := false
+		for _, line := range strings.Split(string(data), "\n") {
+			s := strings.TrimSpace(line)
+			if strings.HasPrefix(s, "PATHS=(") {
+				inPaths = true
+				continue
+			}
+			if inPaths && strings.HasPrefix(s, ")") {
+				inPaths = false
+				continue
+			}
+			if !inPaths {
+				continue
+			}
+			s = strings.Trim(s, "()\" ")
+			if s == "" || strings.HasPrefix(s, "#") {
+				continue
+			}
+			if strings.HasSuffix(s, "/") {
+				dbs = append(dbs, chatDB{label: e.Name() + "/" + filepath.Base(strings.TrimSuffix(s, "/")), remote: []string{s}, local: s, isDir: true})
+			} else {
+				dbs = append(dbs, chatDB{label: e.Name() + "/" + filepath.Base(s), remote: []string{s}, local: s, mergeTables: []string{"*"}})
+			}
+		}
+	}
+	return dbs
+}
+
+func expandHome(p string) string {
+	home, _ := os.UserHomeDir()
+	return strings.Replace(p, "~", home, 1)
+}
+
+// sqliteTables lists table names in a SQLite database.
+func sqliteTables(path string) (map[string]bool, error) {
+	out, err := exec.Command("sqlite3", path, "SELECT name FROM sqlite_master WHERE type='table';").Output()
+	if err != nil {
+		return nil, err
+	}
+	tables := map[string]bool{}
+	for _, name := range strings.Fields(string(out)) {
+		tables[name] = true
+	}
+	return tables, nil
+}
+
+// mergeSQLiteInto merges the given tables from tmpPath into localPath using
+// INSERT OR IGNORE, skipping tables missing on either side. Never deletes.
+func mergeSQLiteInto(localPath, tmpPath string, tables []string) error {
+	remoteTables, err := sqliteTables(tmpPath)
+	if err != nil {
+		return fmt.Errorf("remote snapshot unreadable: %w", err)
+	}
+	localTables, err := sqliteTables(localPath)
+	if err != nil {
+		return fmt.Errorf("local db unreadable: %w", err)
+	}
+	sql := "PRAGMA busy_timeout=60000;ATTACH DATABASE '" + tmpPath + "' AS r;"
+	used := 0
+	for _, t := range tables {
+		if t == "*" {
+			for name := range remoteTables {
+				if strings.HasPrefix(name, "_") || localTables[name] {
+					sql += fmt.Sprintf("INSERT OR IGNORE INTO main.%s SELECT * FROM r.%s;", name, name)
+					used++
+				}
+			}
+			continue
+		}
+		if remoteTables[t] && localTables[t] {
+			sql += fmt.Sprintf("INSERT OR IGNORE INTO main.%s SELECT * FROM r.%s;", t, t)
+			used++
+		}
+	}
+	if used == 0 {
+		return fmt.Errorf("no mergeable tables")
+	}
+	if out, err := exec.Command("sqlite3", localPath, sql).CombinedOutput(); err != nil {
+		return fmt.Errorf("merge failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // chatsPullCmd pulls chats from all reachable fleet machines.
@@ -83,52 +223,74 @@ func chatsPullCmd() *cobra.Command {
 
 				fmt.Printf("  %s (%s): pulling chats...\n", m.Name, m.Host)
 
-				// Pull chat data from remote via rsync + merge
-				home, _ := os.UserHomeDir()
-				remotePaths := []string{
-					"~/.zcode/v2/tasks-index.sqlite",
-					"~/.zcode/cli/db.sqlite",
-					"~/.zcode/cli/rollout/",
-					"~/.opencode/opencode.db",
-				}
-				for _, rpath := range remotePaths {
-					localPath := strings.Replace(rpath, "~", home, 1)
-					os.MkdirAll(filepath.Dir(localPath), 0755)
-
-					// For SQLite DBs, pull to temp and merge (don't overwrite)
-					if strings.HasSuffix(rpath, ".sqlite") || strings.HasSuffix(rpath, ".db") {
-						tmpPath := localPath + ".remote.tmp"
-						rsyncCmd := exec.Command("rsync", "-az",
-							fmt.Sprintf("%s:%s", m.Host, rpath), tmpPath)
+				for _, c := range agentChatDBs(configDir) {
+					if c.isDir {
+						localPath := expandHome(c.local)
+						os.MkdirAll(localPath, 0o755)
+						rsyncCmd := exec.Command("rsync", "-az", "--ignore-existing",
+							fmt.Sprintf("%s:%s", m.Host, c.remote[0]), localPath)
 						if out, err := rsyncCmd.CombinedOutput(); err != nil {
 							if !strings.Contains(string(out), "No such file") {
-								fmt.Printf("    Warning: rsync %s: %v\n", rpath, err)
+								fmt.Printf("    Warning: rsync %s: %v\n", c.remote[0], err)
+							}
+						}
+						continue
+					}
+
+					localPath := expandHome(c.local)
+					// Prefer an existing local DB at the legacy location when the
+					// new one doesn't exist yet.
+					if _, err := os.Stat(localPath); err != nil {
+						for _, cand := range c.remote {
+							lp := expandHome(cand)
+							if _, err := os.Stat(lp); err == nil {
+								localPath = lp
+								break
+							}
+						}
+					}
+					if dir := filepath.Dir(localPath); dir != "" {
+						os.MkdirAll(dir, 0o755)
+					}
+
+					// Pull the first remote candidate that exists.
+					pulled_any := false
+					for _, cand := range c.remote {
+						tmpPath := expandHome(c.local) + ".remote.tmp"
+						rsyncCmd := exec.Command("rsync", "-az",
+							fmt.Sprintf("%s:%s", m.Host, cand), tmpPath)
+						if out, err := rsyncCmd.CombinedOutput(); err != nil {
+							if !strings.Contains(string(out), "No such file") {
+								fmt.Printf("    Warning: rsync %s: %v\n", cand, err)
 							}
 							continue
 						}
-						// Merge remote DB into local (insert or ignore)
+						pulled_any = true
+						// bring WAL siblings along so the snapshot is complete
+						for _, suffix := range []string{"-wal", "-shm"} {
+							walTmp := tmpPath + suffix
+							exec.Command("rsync", "-az", fmt.Sprintf("%s:%s%s", m.Host, cand, suffix), walTmp).Run()
+						}
 						if _, err := os.Stat(localPath); err == nil {
-							mergeSQL := fmt.Sprintf("ATTACH DATABASE '%s' AS remote; INSERT OR IGNORE INTO tasks SELECT * FROM remote.tasks;", tmpPath)
-							if strings.HasSuffix(rpath, "opencode.db") {
-								mergeSQL = fmt.Sprintf("ATTACH DATABASE '%s' AS remote; INSERT OR IGNORE INTO sessions SELECT * FROM remote.sessions;", tmpPath)
+							if err := mergeSQLiteInto(localPath, tmpPath, c.mergeTables); err != nil {
+								fmt.Printf("    Warning: merge %s: %v\n", c.label, err)
 							}
-							if strings.HasSuffix(rpath, "db.sqlite") && !strings.HasSuffix(rpath, "tasks-index.sqlite") {
-								mergeSQL = fmt.Sprintf("ATTACH DATABASE '%s' AS remote; INSERT OR IGNORE INTO session SELECT * FROM remote.session;", tmpPath)
-							}
-							exec.Command("sqlite3", localPath, mergeSQL).Run()
 						} else {
 							os.Rename(tmpPath, localPath)
-						}
-						os.Remove(tmpPath)
-					} else {
-						// For directories (rollout/), use rsync with --ignore-existing
-						rsyncCmd := exec.Command("rsync", "-az", "--ignore-existing",
-							fmt.Sprintf("%s:%s", m.Host, rpath), localPath)
-						if out, err := rsyncCmd.CombinedOutput(); err != nil {
-							if !strings.Contains(string(out), "No such file") {
-								fmt.Printf("    Warning: rsync %s: %v\n", rpath, err)
+							for _, suffix := range []string{"-wal", "-shm"} {
+								if _, err := os.Stat(tmpPath + suffix); err == nil {
+									os.Rename(tmpPath+suffix, localPath+suffix)
+								}
 							}
 						}
+						os.Remove(tmpPath)
+						for _, suffix := range []string{"-wal", "-shm"} {
+							os.Remove(tmpPath + suffix)
+						}
+						break
+					}
+					if !pulled_any {
+						fmt.Printf("    (no %s on peer — skipping)\n", c.label)
 					}
 				}
 				fmt.Printf("  %s: done\n", m.Name)
@@ -144,6 +306,8 @@ func chatsPullCmd() *cobra.Command {
 }
 
 // chatsPushCmd pushes local chats to all reachable fleet machines.
+// Push MERGES into the peer's databases — it never overwrites them, so each
+// machine keeps its own sessions alongside the pushed ones.
 func chatsPushCmd() *cobra.Command {
 	fleetName := ""
 	cmd := &cobra.Command{
@@ -181,22 +345,72 @@ func chatsPushCmd() *cobra.Command {
 				}
 
 				fmt.Printf("  %s (%s): pushing chats...\n", m.Name, m.Host)
-				home, _ := os.UserHomeDir()
-				remotePaths := []string{
-					"~/.zcode/v2/tasks-index.sqlite",
-					"~/.zcode/cli/db.sqlite",
-					"~/.zcode/cli/rollout/",
-					"~/.opencode/opencode.db",
-				}
-				for _, rpath := range remotePaths {
-					localPath := strings.Replace(rpath, "~", home, 1)
-					remotePath := rpath
-					rsyncCmd := exec.Command("rsync", "-az", localPath, fmt.Sprintf("%s:%s", m.Host, remotePath))
-					if out, err := rsyncCmd.CombinedOutput(); err != nil {
-						if !strings.Contains(string(out), "No such file") {
-							fmt.Printf("    Warning: rsync %s: %v\n", rpath, err)
+
+				for _, c := range agentChatDBs(configDir) {
+					localPath := expandHome(c.local)
+					if c.isDir {
+						rsyncCmd := exec.Command("rsync", "-az", "--ignore-existing", localPath,
+							fmt.Sprintf("%s:%s", m.Host, c.remote[0]))
+						if out, err := rsyncCmd.CombinedOutput(); err != nil {
+							if !strings.Contains(string(out), "No such file") {
+								fmt.Printf("    Warning: rsync %s: %v\n", c.local, err)
+							}
+						}
+						continue
+					}
+					if _, err := os.Stat(localPath); err != nil {
+						continue
+					}
+
+					// WAL-safe local snapshot
+					snapshot := localPath + ".push.snap"
+					if out, err := exec.Command("sqlite3", localPath, ".backup '"+snapshot+"'").CombinedOutput(); err != nil {
+						fmt.Printf("    Warning: snapshot %s: %v: %s\n", c.local, err, strings.TrimSpace(string(out)))
+						continue
+					}
+					defer os.Remove(snapshot)
+
+					// First push to a NEW peer DB: send the snapshot as-is.
+					// Otherwise: send to a temp path and MERGE on the peer.
+					peerTarget := ""
+					for _, cand := range c.remote {
+						if _, err := exec.Command("ssh", m.Host, "test", "-e", cand).CombinedOutput(); err == nil {
+							peerTarget = cand
+							break
 						}
 					}
+					if peerTarget == "" {
+						peerTarget = c.remote[0]
+						rsyncCmd := exec.Command("rsync", "-az", snapshot,
+							fmt.Sprintf("%s:%s", m.Host, peerTarget))
+						if _, err := rsyncCmd.CombinedOutput(); err != nil {
+							fmt.Printf("    Warning: rsync %s: %v\n", peerTarget, err)
+						}
+						continue
+					}
+
+					peerTmp := peerTarget + ".incoming"
+					rsyncCmd := exec.Command("rsync", "-az", snapshot, fmt.Sprintf("%s:%s", m.Host, peerTmp))
+					if _, err := rsyncCmd.CombinedOutput(); err != nil {
+						fmt.Printf("    Warning: rsync %s: %v\n", peerTmp, err)
+						continue
+					}
+					// Merge on the peer via stdin SQL (missing tables there are
+					// reported but don't abort the remaining statements).
+					var sql strings.Builder
+					sql.WriteString("PRAGMA busy_timeout=60000;ATTACH DATABASE '" + peerTmp + "' AS r;")
+					for _, t := range c.mergeTables {
+						if t == "*" {
+							continue
+						}
+						sql.WriteString(fmt.Sprintf("INSERT OR IGNORE INTO main.%s SELECT * FROM r.%s;", t, t))
+					}
+					mergeCmd := exec.Command("ssh", m.Host, "sqlite3", peerTarget)
+					mergeCmd.Stdin = strings.NewReader(sql.String())
+					if out, err := mergeCmd.CombinedOutput(); err != nil {
+						fmt.Printf("    Warning: peer merge %s: %v: %s\n", c.label, err, strings.TrimSpace(string(out)))
+					}
+					exec.Command("ssh", m.Host, "rm", "-f", peerTmp, peerTmp+"-wal", peerTmp+"-shm").Run()
 				}
 				fmt.Printf("  %s: done\n", m.Name)
 				pushed++
@@ -332,9 +546,6 @@ func countLocalSessions(home string) int {
 	}
 	return count
 }
-
-// loadFleet is already defined in fleet.go
-// resolveConfigDir is already defined in fleet.go
 
 // chatsDaemonCmd manages the sync daemon.
 func chatsDaemonCmd() *cobra.Command {

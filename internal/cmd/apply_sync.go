@@ -201,8 +201,17 @@ func applyMCPConfig(dryRun bool) {
 	}
 	runShellStep("sync mcp", `
 		mkdir -p "$HOME/.zcode/cli"
-		cp mcp/config.json "$HOME/.zcode/cli/config.json"
-		echo "  MCP config synced"
+		if [ -f "$HOME/.zcode/cli/config.json" ] && command -v jq &>/dev/null; then
+			# Deep-merge the repo's MCP config into the live config so account
+			# providers (e.g. zai) and other keys are preserved.
+			jq -s '.[0] * .[1]' "$HOME/.zcode/cli/config.json" mcp/config.json \
+				> "$HOME/.zcode/cli/config.json.tmp" \
+				&& mv "$HOME/.zcode/cli/config.json.tmp" "$HOME/.zcode/cli/config.json" \
+				&& echo "  MCP config merged into ~/.zcode/cli/config.json"
+		else
+			cp mcp/config.json "$HOME/.zcode/cli/config.json"
+			echo "  MCP config synced (no existing config)"
+		fi
 	`)
 }
 

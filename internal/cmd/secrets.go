@@ -229,7 +229,83 @@ var secretsGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// CLI convention: always end with a newline so redirected output is a
+		// well-formed file (e.g. `mf secrets get SSH_KEY_DEV_MF > ~/.ssh/dev-mf`).
+		if !strings.HasSuffix(val, "\n") {
+			val += "\n"
+		}
 		fmt.Print(val)
+		return nil
+	},
+}
+
+// --- export-for ---
+
+var secretsExportForCmd = &cobra.Command{
+	Use:   "export-for PUBKEY",
+	Short: "Stream this machine's secrets re-encrypted for another age recipient",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		secrets, err := decryptLocalSecrets()
+		if err != nil {
+			return err
+		}
+		if len(secrets) == 0 {
+			return fmt.Errorf("no secrets to export")
+		}
+		data, err := json.MarshalIndent(secrets, "", "  ")
+		if err != nil {
+			return err
+		}
+		enc := exec.Command("age", "-r", args[0], "-a")
+		enc.Stdin = strings.NewReader(string(data))
+		enc.Stderr = os.Stderr
+		out, err := enc.Output()
+		if err != nil {
+			return fmt.Errorf("failed to encrypt for recipient: %w", err)
+		}
+		os.Stdout.Write(out)
+		return nil
+	},
+}
+
+// --- merge-from ---
+
+var secretsMergeFromCmd = &cobra.Command{
+	Use:   "merge-from FILE",
+	Short: "Merge secrets from an age-encrypted file into the local store (existing local values win)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		data, err := os.ReadFile(args[0])
+		if err != nil {
+			return err
+		}
+		dec := exec.Command("age", "-d", "-i", ageKeyPath())
+		dec.Stdin = strings.NewReader(string(data))
+		dec.Stderr = os.Stderr
+		out, err := dec.Output()
+		if err != nil {
+			return fmt.Errorf("cannot decrypt %s (are you a recipient?): %w", args[0], err)
+		}
+		incoming := map[string]string{}
+		if err := json.Unmarshal(out, &incoming); err != nil {
+			return fmt.Errorf("decrypted file is not a secrets store: %w", err)
+		}
+		secrets, err := decryptLocalSecrets()
+		if err != nil {
+			secrets = map[string]string{}
+		}
+		added := 0
+		for k, v := range incoming {
+			if _, exists := secrets[k]; !exists {
+				secrets[k] = v
+				added++
+			}
+		}
+		if err := encryptLocalSecrets(secrets); err != nil {
+			return err
+		}
+		fmt.Printf("Merged %d new secrets from %s (%d total)\n", added, args[0], len(secrets))
 		return nil
 	},
 }
@@ -310,21 +386,57 @@ func syncFromPeer(peerNameOrAddr string) error {
 	}
 
 	fmt.Printf("Pulling secrets from %s...\n", sshAddr)
-	remoteFile := "~/.config/mainframe/secrets.age"
-	localFile := secretsAgePath()
 
-	scpCmd := exec.Command("scp", sshAddr+":"+remoteFile, localFile)
-	scpCmd.Stderr = os.Stderr
-	if err := scpCmd.Run(); err != nil {
-		return fmt.Errorf("failed to pull from %s: %w", sshAddr, err)
-	}
-
-	secrets, err := decryptLocalSecrets()
+	tmp, err := os.CreateTemp("", "mainframe-secrets-*.age")
 	if err != nil {
-		return fmt.Errorf("pulled file but can't decrypt (are you a recipient?): %w", err)
+		return err
 	}
-	fmt.Printf("Pulled %d secrets from %s\n", len(secrets), sshAddr)
+	tmpPath := tmp.Name()
+	tmp.Close()
+	defer os.Remove(tmpPath)
+
+	// Preferred: ask the peer to re-encrypt its store for THIS machine's key.
+	// This works even when this machine has a brand-new keypair (e.g. after a
+	// wipe/reinstall) and was never a recipient of the peer's store.
+	myPub := ""
+	if pubData, err := os.ReadFile(agePubPath()); err == nil {
+		myPub = strings.TrimSpace(string(pubData))
+	}
+	merged := false
+	if myPub != "" {
+		exportCmd := exec.Command("ssh", sshAddr, "mf secrets export-for "+myPub)
+		out, err := exportCmd.Output()
+		if err == nil && len(out) > 0 {
+			if werr := os.WriteFile(tmpPath, out, 0o600); werr == nil {
+				if merr := mergeFrom(tempFileArg(tmpPath)); merr == nil {
+					merged = true
+				} else {
+					fmt.Printf("  export-for succeeded but merge failed: %v\n", merr)
+				}
+			}
+		}
+	}
+
+	// Fallback: copy the peer's store and merge if this machine is a recipient.
+	if !merged {
+		remoteFile := "~/.config/mainframe/secrets.age"
+		scpCmd := exec.Command("scp", sshAddr+":"+remoteFile, tmpPath)
+		scpCmd.Stderr = os.Stderr
+		if err := scpCmd.Run(); err != nil {
+			return fmt.Errorf("failed to pull from %s: %w", sshAddr, err)
+		}
+		if err := mergeFrom(tempFileArg(tmpPath)); err != nil {
+			return fmt.Errorf("pulled file but can't merge (ask the peer to upgrade mf so it supports 'export-for', or re-add this machine as a recipient): %w", err)
+		}
+	}
 	return nil
+}
+
+// tempFileArg keeps merge-from call sites readable.
+func tempFileArg(path string) string { return path }
+
+func mergeFrom(path string) error {
+	return secretsMergeFromCmd.RunE(secretsMergeFromCmd, []string{path})
 }
 
 func syncToPeers() error {
@@ -346,16 +458,23 @@ func syncToPeers() error {
 			continue
 		}
 		fmt.Printf("Pushing to %s (%s)...\n", name, peer.SSH)
-		remoteFile := "~/.config/mainframe/secrets.age"
-		// Ensure remote dir exists
+		// Copy to a temp path on the peer, then MERGE there — never overwrite
+		// the peer's own store (which may hold secrets we don't have).
+		tmpRemote := "~/.config/mainframe/.secrets-incoming.age"
 		exec.Command("ssh", peer.SSH, "mkdir -p ~/.config/mainframe").Run()
-		scpCmd := exec.Command("scp", localFile, peer.SSH+":"+remoteFile)
+		scpCmd := exec.Command("scp", localFile, peer.SSH+":"+tmpRemote)
 		scpCmd.Stderr = os.Stderr
 		if err := scpCmd.Run(); err != nil {
 			fmt.Printf("  Failed: %v\n", err)
-		} else {
-			fmt.Printf("  Synced to %s\n", name)
+			continue
 		}
+		mergeCmd := exec.Command("ssh", peer.SSH, "mf secrets merge-from "+tmpRemote+" && rm -f "+tmpRemote)
+		mergeCmd.Stderr = os.Stderr
+		if err := mergeCmd.Run(); err != nil {
+			fmt.Printf("  Failed to merge on peer (upgrade mf there): %v\n", err)
+			continue
+		}
+		fmt.Printf("  Synced to %s\n", name)
 	}
 	return nil
 }
@@ -811,6 +930,8 @@ func init() {
 	secretsCmd.AddCommand(secretsInitCmd)
 	secretsCmd.AddCommand(secretsSetCmd)
 	secretsCmd.AddCommand(secretsSyncCmd)
+	secretsCmd.AddCommand(secretsExportForCmd)
+	secretsCmd.AddCommand(secretsMergeFromCmd)
 	secretsCmd.AddCommand(secretsPeersCmd)
 	secretsCmd.AddCommand(secretsPubKeyCmd)
 	secretsCmd.AddCommand(secretsSetupInfisicalCmd)
